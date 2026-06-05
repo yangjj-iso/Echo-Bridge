@@ -7,6 +7,7 @@
   },
   "references": [
     { "path": "../../packages/audio" },
+    { "path": "../../packages/captions" },
     { "path": "../../packages/pipeline" },
     { "path": "../../packages/shared" },
     { "path": "../../packages/transcription" },

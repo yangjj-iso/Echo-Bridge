@@ -12,7 +12,7 @@ notes after the talk.
 - Output-device oriented audio capture, designed around Windows WASAPI loopback.
 - Realtime transcription and Chinese translation pipeline owned by the backend layer.
 - Revision-aware caption model for correcting earlier recognition or translation.
-- Post-session summary and export pipeline.
+- Live bilingual transcript record, compact subtitle window, and Markdown/SRT export.
 
 ## Repository Layout
 
@@ -27,6 +27,18 @@ packages/transcription Speech-to-text provider boundary
 packages/translation  Translation and revision provider boundary
 docs                  Architecture and delivery planning
 ```
+
+## Current Experience
+
+- Main desktop workspace with device selection, session controls, status metrics,
+  live subtitles, and realtime bilingual record.
+- Compact always-on-top mini window for watching translated subtitles while using
+  another meeting, course, or video app.
+- Local backend record APIs:
+  - `GET /sessions/current/record`
+  - `GET /sessions/current/captions`
+  - `GET /sessions/current/export.md`
+  - `GET /sessions/current/export.srt`
 
 ## Development
 

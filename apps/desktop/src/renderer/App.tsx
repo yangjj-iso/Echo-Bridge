@@ -1,5 +1,13 @@
 import { useEffect, useMemo, useState, type Dispatch, type ReactNode, type SetStateAction } from 'react';
-import { Captions, Languages, MonitorSpeaker, Square, Wand2 } from 'lucide-react';
+import {
+  Captions,
+  Download,
+  Languages,
+  MonitorSpeaker,
+  PictureInPicture2,
+  Square,
+  Wand2,
+} from 'lucide-react';
 import { createRoot } from 'react-dom/client';
 
 import type { AppEvent, AudioDevice, CaptionSegment, SessionStatus } from '@echo-bridge/shared';
@@ -7,13 +15,20 @@ import type { AppEvent, AudioDevice, CaptionSegment, SessionStatus } from '@echo
 import './styles.css';
 
 function App() {
+  const isMiniView = new URLSearchParams(window.location.search).get('view') === 'mini';
   const [devices, setDevices] = useState<AudioDevice[]>([]);
   const [selectedDeviceId, setSelectedDeviceId] = useState('');
   const [status, setStatus] = useState<SessionStatus>('idle');
   const [captions, setCaptions] = useState<CaptionSegment[]>([]);
+  const [exportUrls, setExportUrls] = useState<{ markdown: string; srt: string }>();
   const [lastError, setLastError] = useState<string | undefined>();
 
   useEffect(() => {
+    void window.echoBridge.getExportUrls().then(setExportUrls);
+    void window.echoBridge.getCurrentRecord().then(({ record }) => {
+      setStatus(record.status);
+      setCaptions(record.captions);
+    });
     void window.echoBridge.listDevices().then((items) => {
       setDevices(items);
       setSelectedDeviceId(items.find((device) => device.isDefault)?.id ?? items[0]?.id ?? '');
@@ -48,7 +63,23 @@ function App() {
   }
 
   async function stopSession() {
-    await window.echoBridge.stopSession();
+    const finalCaptions = await window.echoBridge.stopSession();
+    setCaptions(finalCaptions);
+  }
+
+  if (isMiniView) {
+    return (
+      <main className="mini-shell">
+        <div className="mini-status">
+          <span>{status}</span>
+          <strong>{captions.length}</strong>
+        </div>
+        <section className="mini-caption">
+          <h1>{activeCaption?.translatedText ?? 'Waiting for captions...'}</h1>
+          <p>{activeCaption?.sourceText ?? 'Start a session in the main window.'}</p>
+        </section>
+      </main>
+    );
   }
 
   return (
@@ -71,6 +102,10 @@ function App() {
         </label>
 
         <div className="actions">
+          <button onClick={() => void window.echoBridge.openMiniWindow()}>
+            <PictureInPicture2 size={18} />
+            Mini
+          </button>
           <button className="primary" disabled={!canStart} onClick={() => void startSession()}>
             <MonitorSpeaker size={18} />
             Start
@@ -98,6 +133,22 @@ function App() {
       </section>
 
       <section className="caption-list">
+        <div className="section-header">
+          <div>
+            <p className="eyebrow">Live record</p>
+            <h2>Realtime bilingual transcript</h2>
+          </div>
+          <div className="export-actions">
+            <a className="export-link" href={exportUrls?.markdown} target="_blank" rel="noreferrer">
+              <Download size={16} />
+              Markdown
+            </a>
+            <a className="export-link" href={exportUrls?.srt} target="_blank" rel="noreferrer">
+              <Download size={16} />
+              SRT
+            </a>
+          </div>
+        </div>
         {captions.map((caption) => (
           <article key={caption.id} className="caption-row">
             <time>{formatTime(caption.startMs)}</time>
@@ -110,6 +161,9 @@ function App() {
             </span>
           </article>
         ))}
+        {captions.length === 0 ? (
+          <div className="empty-record">No captions recorded yet.</div>
+        ) : null}
       </section>
     </main>
   );

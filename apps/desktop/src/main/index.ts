@@ -10,6 +10,7 @@ const apiBaseUrl = process.env.ECHO_BRIDGE_API_URL ?? 'http://127.0.0.1:4317';
 const apiEventsUrl = apiBaseUrl.replace(/^http/, 'ws') + '/events';
 
 let mainWindow: BrowserWindow | undefined;
+let miniWindow: BrowserWindow | undefined;
 let eventSocket: WebSocket | undefined;
 
 function sendEvent(event: AppEvent): void {
@@ -40,6 +41,41 @@ async function createWindow(): Promise<void> {
   connectEventSocket();
 }
 
+async function createMiniWindow(): Promise<void> {
+  if (miniWindow && !miniWindow.isDestroyed()) {
+    miniWindow.show();
+    miniWindow.focus();
+    return;
+  }
+
+  miniWindow = new BrowserWindow({
+    width: 560,
+    height: 240,
+    minWidth: 420,
+    minHeight: 180,
+    title: 'EchoBridge Mini',
+    alwaysOnTop: true,
+    backgroundColor: '#0b1120',
+    webPreferences: {
+      preload: path.join(dirname, '../preload/index.cjs'),
+      contextIsolation: true,
+      nodeIntegration: false,
+    },
+  });
+
+  miniWindow.on('closed', () => {
+    miniWindow = undefined;
+  });
+
+  if (process.env.VITE_DEV_SERVER_URL) {
+    await miniWindow.loadURL(`${process.env.VITE_DEV_SERVER_URL}?view=mini`);
+  } else {
+    await miniWindow.loadFile(path.join(dirname, '../../dist/index.html'), {
+      query: { view: 'mini' },
+    });
+  }
+}
+
 ipcMain.handle('devices:list', async () => {
   const payload = await requestJson<{ devices: AudioDevice[] }>('/devices');
   return payload.devices;
@@ -57,6 +93,21 @@ ipcMain.handle('session:stop', async () => {
     method: 'POST',
   });
   return payload.captions;
+});
+
+ipcMain.handle('session:record', async () => {
+  return requestJson('/sessions/current/record');
+});
+
+ipcMain.handle('exports:urls', () => {
+  return {
+    markdown: `${apiBaseUrl}/sessions/current/export.md`,
+    srt: `${apiBaseUrl}/sessions/current/export.srt`,
+  };
+});
+
+ipcMain.handle('window:mini', async () => {
+  await createMiniWindow();
 });
 
 void app.whenReady().then(createWindow);

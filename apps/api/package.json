@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@echo-bridge/audio": "file:../../packages/audio",
+    "@echo-bridge/captions": "file:../../packages/captions",
     "@echo-bridge/pipeline": "file:../../packages/pipeline",
     "@echo-bridge/shared": "file:../../packages/shared",
     "@echo-bridge/transcription": "file:../../packages/transcription",

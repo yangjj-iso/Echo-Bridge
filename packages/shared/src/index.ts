@@ -53,6 +53,14 @@ export interface SessionSummary {
   takeaways: string[];
 }
 
+export interface SessionRecord {
+  sessionId?: string;
+  startedAt?: string;
+  endedAt?: string;
+  status: SessionStatus;
+  captions: CaptionSegment[];
+}
+
 export type AppErrorCode =
   | 'AUDIO_DEVICE_NOT_FOUND'
   | 'AUDIO_CAPTURE_FAILED'

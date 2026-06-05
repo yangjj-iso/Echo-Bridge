@@ -13,7 +13,7 @@ produce useful records after a session ends.
 Local API backend
   -> owns interpretation pipeline and AI provider clients
   -> manages realtime session state
-  -> exposes REST controls and WebSocket events
+  -> exposes REST controls, transcript records, exports, and WebSocket events
 
 Electron main process
   -> connects desktop UI to the local API
@@ -71,6 +71,21 @@ requests, and renderer event forwarding.
 8. API broadcasts caption upserts and revision events over WebSocket.
 9. Renderer receives caption events through Electron IPC.
 10. Session end triggers summary and export generation.
+
+## Desktop Views
+
+The main workspace owns session control, device selection, realtime status,
+record review, and export links. A compact always-on-top mini window can be
+opened from the main workspace. The mini window uses the same preload API and
+event stream, but renders only the current translated caption and source text so
+it can sit beside a meeting, course, or video player.
+
+## Session Records
+
+The local API keeps an in-memory current-session record. Caption upsert events
+are applied to that record before being broadcast to clients, so late subscribers
+can fetch the latest state through `GET /sessions/current/record`. Markdown and
+SRT exports are generated from the same caption model used by the live view.
 
 ## Windows Audio Plan
 
