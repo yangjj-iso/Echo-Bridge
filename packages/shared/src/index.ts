@@ -60,6 +60,7 @@ export interface SessionRecord {
   endedAt?: string;
   status: SessionStatus;
   captions: CaptionSegment[];
+  summary?: SessionSummary;
 }
 
 export interface SessionHistoryItem {
@@ -69,6 +70,7 @@ export interface SessionHistoryItem {
   captionCount: number;
   durationMs: number;
   revisedCount: number;
+  title?: string;
 }
 
 export type AppErrorCode =

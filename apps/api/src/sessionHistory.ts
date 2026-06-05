@@ -2,13 +2,15 @@ import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { summarizeCaptions } from '@echo-bridge/captions';
+import { generateSessionSummary, summarizeCaptions } from '@echo-bridge/captions';
 import type { SessionHistoryItem, SessionRecord } from '@echo-bridge/shared';
 
 const moduleDirectory = path.dirname(fileURLToPath(import.meta.url));
 const sessionsDir = path.resolve(moduleDirectory, '../../../data/sessions');
 
-export async function saveSessionRecord(record: SessionRecord): Promise<SessionHistoryItem | undefined> {
+export async function saveSessionRecord(
+  record: SessionRecord,
+): Promise<SessionHistoryItem | undefined> {
   if (!record.sessionId || record.captions.length === 0) {
     return undefined;
   }
@@ -18,6 +20,9 @@ export async function saveSessionRecord(record: SessionRecord): Promise<SessionH
     ...record,
     endedAt: record.endedAt ?? new Date().toISOString(),
     status: 'idle',
+    summary:
+      record.summary ??
+      (record.sessionId ? generateSessionSummary(record.sessionId, record.captions) : undefined),
   };
 
   await writeFile(sessionPath(record.sessionId), JSON.stringify(normalized, null, 2), 'utf8');
@@ -57,6 +62,11 @@ function safeFileName(value: string): string {
 
 function toHistoryItem(record: SessionRecord): SessionHistoryItem {
   const stats = summarizeCaptions(record.captions);
+  const summary =
+    record.summary ??
+    (record.sessionId && record.captions.length > 0
+      ? generateSessionSummary(record.sessionId, record.captions)
+      : undefined);
 
   return {
     sessionId: record.sessionId ?? 'unknown',
@@ -65,5 +75,6 @@ function toHistoryItem(record: SessionRecord): SessionHistoryItem {
     captionCount: record.captions.length,
     durationMs: stats.durationMs,
     revisedCount: stats.revised,
+    title: summary?.title,
   };
 }
