@@ -41,6 +41,17 @@ app.get('/health', (_request, response) => {
   });
 });
 
+app.get('/diagnostics', async (_request, response) => {
+  const audio = await getAudioDiagnostics();
+  const ai = getAiDiagnostics(process.env);
+
+  response.json({
+    ok: audio.ready && ai.ready,
+    audio,
+    ai,
+  });
+});
+
 app.get('/devices', async (_request, response, next) => {
   try {
     const devices = await audioSource.listOutputDevices();
@@ -228,5 +239,47 @@ function parseStartSessionRequest(value: unknown): StartSessionRequest {
     sourceLanguage: body.sourceLanguage,
     targetLanguage: body.targetLanguage,
     latencyMode: body.latencyMode,
+  };
+}
+
+async function getAudioDiagnostics() {
+  try {
+    const devices = await audioSource.listOutputDevices();
+    return {
+      ready: devices.length > 0,
+      deviceCount: devices.length,
+      defaultDeviceLabel: devices.find((device) => device.isDefault)?.label,
+      message: devices.length > 0 ? 'Audio output capture is available.' : 'No active output devices found.',
+    };
+  } catch (error) {
+    return {
+      ready: false,
+      deviceCount: 0,
+      message: error instanceof Error ? error.message : 'Unable to inspect output devices.',
+    };
+  }
+}
+
+function getAiDiagnostics(env: NodeJS.ProcessEnv) {
+  if (aiProviders.providerName === 'mock') {
+    return {
+      ready: true,
+      provider: aiProviders.providerName,
+      mode: aiProviders.providerMode,
+      hasApiKey: false,
+      message: 'Mock AI provider is active.',
+    };
+  }
+
+  const hasApiKey = Boolean(env.OPENAI_API_KEY);
+  return {
+    ready: hasApiKey,
+    provider: aiProviders.providerName,
+    mode: aiProviders.providerMode,
+    hasApiKey,
+    transcriptionModel: env.ECHO_BRIDGE_TRANSCRIPTION_MODEL ?? 'gpt-4o-transcribe',
+    translationModel: env.ECHO_BRIDGE_TRANSLATION_MODEL ?? 'gpt-4.1-mini',
+    realtimeModel: env.ECHO_BRIDGE_REALTIME_MODEL ?? 'gpt-realtime',
+    message: hasApiKey ? 'OpenAI provider is configured.' : 'OPENAI_API_KEY is required for OpenAI provider modes.',
   };
 }

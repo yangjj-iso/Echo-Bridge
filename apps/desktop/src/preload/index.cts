@@ -21,8 +21,29 @@ export interface HealthStatus {
   aiProviderMode: string;
 }
 
+export interface DiagnosticsStatus {
+  ok: boolean;
+  audio: {
+    ready: boolean;
+    deviceCount: number;
+    defaultDeviceLabel?: string;
+    message: string;
+  };
+  ai: {
+    ready: boolean;
+    provider: string;
+    mode: string;
+    hasApiKey: boolean;
+    transcriptionModel?: string;
+    translationModel?: string;
+    realtimeModel?: string;
+    message: string;
+  };
+}
+
 export interface EchoBridgeApi {
   getHealth(): Promise<HealthStatus>;
+  getDiagnostics(): Promise<DiagnosticsStatus>;
   listDevices(): Promise<AudioDevice[]>;
   startSession(request: StartSessionRequest): Promise<{ sessionId: string }>;
   stopSession(): Promise<CaptionSegment[]>;
@@ -37,6 +58,7 @@ export interface EchoBridgeApi {
 
 const api: EchoBridgeApi = {
   getHealth: () => ipcRenderer.invoke('health:get') as Promise<HealthStatus>,
+  getDiagnostics: () => ipcRenderer.invoke('diagnostics:get') as Promise<DiagnosticsStatus>,
   listDevices: () => ipcRenderer.invoke('devices:list') as Promise<AudioDevice[]>,
   startSession: (request) =>
     ipcRenderer.invoke('session:start', request) as Promise<{ sessionId: string }>,

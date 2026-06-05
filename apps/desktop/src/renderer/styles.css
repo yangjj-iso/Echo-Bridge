@@ -148,6 +148,51 @@ h1 {
   padding: 12px 14px;
 }
 
+.diagnostics-panel {
+  background: #0b1120;
+  border: 1px solid #1f2937;
+  border-radius: 8px;
+  display: grid;
+  gap: 1px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  overflow: hidden;
+}
+
+.diagnostic-item {
+  align-items: start;
+  background: #111827;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: 10px minmax(0, 1fr);
+  min-height: 68px;
+  padding: 14px;
+}
+
+.diagnostic-dot {
+  background: #f59e0b;
+  border-radius: 999px;
+  height: 9px;
+  margin-top: 5px;
+  width: 9px;
+}
+
+.diagnostic-dot.ready {
+  background: #14b8a6;
+}
+
+.diagnostic-item strong {
+  color: #f8fafc;
+  display: block;
+  font-size: 13px;
+  margin-bottom: 4px;
+}
+
+.diagnostic-item p {
+  color: #94a3b8;
+  font-size: 13px;
+  line-height: 1.35;
+}
+
 .live-caption {
   background: #f8fafc;
   border-radius: 8px;
@@ -359,6 +404,7 @@ time {
 @media (max-width: 840px) {
   .control-panel,
   .status-grid,
+  .diagnostics-panel,
   .caption-row,
   .history-item {
     grid-template-columns: 1fr;
