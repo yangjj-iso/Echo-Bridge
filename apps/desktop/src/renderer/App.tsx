@@ -1,4 +1,11 @@
-import { useEffect, useMemo, useState, type Dispatch, type ReactNode, type SetStateAction } from 'react';
+import {
+  useEffect,
+  useMemo,
+  useState,
+  type Dispatch,
+  type ReactNode,
+  type SetStateAction,
+} from 'react';
 import {
   Captions,
   Download,
@@ -15,8 +22,11 @@ import type {
   AppEvent,
   AudioDevice,
   CaptionSegment,
+  LanguageCode,
   SessionHistoryItem,
   SessionStatus,
+  StartSessionRequest,
+  TargetLanguageCode,
 } from '@echo-bridge/shared';
 
 import './styles.css';
@@ -26,6 +36,9 @@ function App() {
   const echoBridge = useMemo(() => window.echoBridge ?? createBrowserEchoBridgeApi(), []);
   const [devices, setDevices] = useState<AudioDevice[]>([]);
   const [selectedDeviceId, setSelectedDeviceId] = useState('');
+  const [sourceLanguage, setSourceLanguage] = useState<LanguageCode>('en');
+  const [targetLanguage, setTargetLanguage] = useState<TargetLanguageCode>('zh-CN');
+  const [latencyMode, setLatencyMode] = useState<StartSessionRequest['latencyMode']>('balanced');
   const [status, setStatus] = useState<SessionStatus>('idle');
   const [captions, setCaptions] = useState<CaptionSegment[]>([]);
   const [exportUrls, setExportUrls] = useState<{ markdown: string; srt: string }>();
@@ -33,7 +46,8 @@ function App() {
   const [viewingHistoryId, setViewingHistoryId] = useState<string | undefined>();
   const [lastError, setLastError] = useState<string | undefined>();
   const [providerMode, setProviderMode] = useState('unknown');
-  const [diagnostics, setDiagnostics] = useState<Awaited<ReturnType<typeof echoBridge.getDiagnostics>>>();
+  const [diagnostics, setDiagnostics] =
+    useState<Awaited<ReturnType<typeof echoBridge.getDiagnostics>>>();
 
   useEffect(() => {
     void echoBridge.getHealth().then((health) => setProviderMode(health.aiProviderMode));
@@ -55,7 +69,8 @@ function App() {
   }, [echoBridge]);
 
   const activeCaption = captions.at(-1);
-  const canStart = selectedDeviceId && (status === 'idle' || status === 'paused' || status === 'error');
+  const canStart =
+    selectedDeviceId && (status === 'idle' || status === 'paused' || status === 'error');
   const canStop = status === 'listening' || status === 'starting';
 
   const revisedCount = useMemo(
@@ -74,9 +89,9 @@ function App() {
     setExportUrls(await echoBridge.getExportUrls());
     await echoBridge.startSession({
       deviceId: selectedDeviceId,
-      sourceLanguage: 'en',
-      targetLanguage: 'zh-CN',
-      latencyMode: 'balanced',
+      sourceLanguage,
+      targetLanguage,
+      latencyMode,
     });
   }
 
@@ -137,7 +152,10 @@ function App() {
 
         <label className="field">
           <span>Output device</span>
-          <select value={selectedDeviceId} onChange={(event) => setSelectedDeviceId(event.target.value)}>
+          <select
+            value={selectedDeviceId}
+            onChange={(event) => setSelectedDeviceId(event.target.value)}
+          >
             {devices.map((device) => (
               <option key={device.id} value={device.id}>
                 {device.label}
@@ -162,8 +180,47 @@ function App() {
         </div>
       </section>
 
+      <section className="session-settings">
+        <label className="field">
+          <span>Source language</span>
+          <select
+            value={sourceLanguage}
+            onChange={(event) => setSourceLanguage(event.target.value as LanguageCode)}
+          >
+            <option value="en">English</option>
+            <option value="auto">Auto detect</option>
+          </select>
+        </label>
+        <label className="field">
+          <span>Target language</span>
+          <select
+            value={targetLanguage}
+            onChange={(event) => setTargetLanguage(event.target.value as TargetLanguageCode)}
+          >
+            <option value="zh-CN">Chinese</option>
+          </select>
+        </label>
+        <label className="field">
+          <span>Latency mode</span>
+          <select
+            value={latencyMode}
+            onChange={(event) =>
+              setLatencyMode(event.target.value as StartSessionRequest['latencyMode'])
+            }
+          >
+            <option value="low">Low latency</option>
+            <option value="balanced">Balanced</option>
+            <option value="accurate">Accurate</option>
+          </select>
+        </label>
+      </section>
+
       <section className="status-grid">
-        <Metric icon={<Languages size={18} />} label="Language" value="English -> Chinese" />
+        <Metric
+          icon={<Languages size={18} />}
+          label="Language"
+          value={`${formatLanguage(sourceLanguage)} -> ${formatLanguage(targetLanguage)}`}
+        />
         <Metric icon={<Captions size={18} />} label="Captions" value={String(captions.length)} />
         <Metric icon={<Wand2 size={18} />} label="Revisions" value={String(revisedCount)} />
         <Metric label="Provider" value={providerMode} />
@@ -174,8 +231,16 @@ function App() {
 
       {diagnostics ? (
         <section className="diagnostics-panel">
-          <DiagnosticItem label="Audio" ready={diagnostics.audio.ready} message={diagnostics.audio.message} />
-          <DiagnosticItem label="AI" ready={diagnostics.ai.ready} message={diagnostics.ai.message} />
+          <DiagnosticItem
+            label="Audio"
+            ready={diagnostics.audio.ready}
+            message={diagnostics.audio.message}
+          />
+          <DiagnosticItem
+            label="AI"
+            ready={diagnostics.ai.ready}
+            message={diagnostics.ai.message}
+          />
           <DiagnosticItem
             label="Mode"
             ready={diagnostics.ok}
@@ -194,7 +259,9 @@ function App() {
         <div className="section-header">
           <div>
             <p className="eyebrow">{viewingHistoryId ? 'History record' : 'Live record'}</p>
-            <h2>{viewingHistoryId ? 'Saved bilingual transcript' : 'Realtime bilingual transcript'}</h2>
+            <h2>
+              {viewingHistoryId ? 'Saved bilingual transcript' : 'Realtime bilingual transcript'}
+            </h2>
           </div>
           <div className="export-actions">
             {viewingHistoryId ? (
@@ -242,7 +309,9 @@ function App() {
           {history.map((item) => (
             <button
               key={item.sessionId}
-              className={item.sessionId === viewingHistoryId ? 'history-item active' : 'history-item'}
+              className={
+                item.sessionId === viewingHistoryId ? 'history-item active' : 'history-item'
+              }
               onClick={() => void loadHistory(item.sessionId)}
             >
               <span>{formatDate(item.startedAt)}</span>
@@ -279,15 +348,19 @@ function createBrowserEchoBridgeApi(): Window['echoBridge'] {
       });
     },
     async stopSession() {
-      const payload = await requestJson<{ captions: CaptionSegment[] }>(`${apiBaseUrl}/sessions/stop`, {
-        method: 'POST',
-      });
+      const payload = await requestJson<{ captions: CaptionSegment[] }>(
+        `${apiBaseUrl}/sessions/stop`,
+        {
+          method: 'POST',
+        },
+      );
       return payload.captions;
     },
     getCurrentRecord() {
-      return requestJson<{ record: { status: SessionStatus; captions: CaptionSegment[] }; stats: unknown }>(
-        `${apiBaseUrl}/sessions/current/record`,
-      );
+      return requestJson<{
+        record: { status: SessionStatus; captions: CaptionSegment[] };
+        stats: unknown;
+      }>(`${apiBaseUrl}/sessions/current/record`);
     },
     async getExportUrls() {
       return {
@@ -376,7 +449,9 @@ function handleAppEvent(
     case 'caption.upserted':
       setCaptions((current) => {
         const withoutCurrent = current.filter((caption) => caption.id !== event.caption.id);
-        return [...withoutCurrent, event.caption].sort((left, right) => left.startMs - right.startMs);
+        return [...withoutCurrent, event.caption].sort(
+          (left, right) => left.startMs - right.startMs,
+        );
       });
       break;
     case 'caption.revised':
@@ -390,15 +465,7 @@ function handleAppEvent(
   }
 }
 
-function Metric({
-  icon,
-  label,
-  value,
-}: {
-  icon?: ReactNode;
-  label: string;
-  value: string;
-}) {
+function Metric({ icon, label, value }: { icon?: ReactNode; label: string; value: string }) {
   return (
     <div className="metric">
       <span>{icon}</span>
@@ -431,6 +498,17 @@ function formatDuration(ms: number): string {
   const seconds = Math.max(0, Math.round(ms / 1000));
   const minutes = Math.floor(seconds / 60);
   return `${minutes}:${(seconds % 60).toString().padStart(2, '0')}`;
+}
+
+function formatLanguage(language: LanguageCode): string {
+  switch (language) {
+    case 'auto':
+      return 'Auto';
+    case 'en':
+      return 'English';
+    case 'zh-CN':
+      return 'Chinese';
+  }
 }
 
 createRoot(document.getElementById('root') as HTMLElement).render(<App />);

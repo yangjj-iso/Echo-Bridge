@@ -7,9 +7,10 @@ import { createAiProvidersFromEnv } from '@echo-bridge/ai';
 import { createAudioCaptureSource } from '@echo-bridge/audio';
 import { exportMarkdown, exportSrt, summarizeCaptions } from '@echo-bridge/captions';
 import { InterpretationPipeline } from '@echo-bridge/pipeline';
-import type { AppEvent, CaptionSegment, SessionRecord, StartSessionRequest } from '@echo-bridge/shared';
+import type { AppEvent, CaptionSegment, SessionRecord } from '@echo-bridge/shared';
 
 import { listSessionHistory, readSessionRecord, saveSessionRecord } from './sessionHistory.js';
+import { ApiRequestError, parseStartSessionRequest } from './startSessionRequest.js';
 
 const port = Number(process.env.ECHO_BRIDGE_API_PORT ?? 4317);
 const audioSource = createAudioCaptureSource();
@@ -64,11 +65,12 @@ app.get('/devices', async (_request, response, next) => {
 
 app.post('/sessions', async (request, response, next) => {
   try {
+    const startRequest = parseStartSessionRequest(request.body);
     sessionRecord = {
       status: 'starting',
       captions: [],
     };
-    const result = await pipeline.start(parseStartSessionRequest(request.body), emit);
+    const result = await pipeline.start(startRequest, emit);
     sessionRecord = {
       sessionId: result.sessionId,
       startedAt: new Date().toISOString(),
@@ -169,12 +171,12 @@ app.get('/sessions/current/export.srt', (_request, response) => {
 
 app.use((error: unknown, _request: Request, response: Response, _next: NextFunction) => {
   void _next;
-  const message = error instanceof Error ? error.message : 'Unexpected API error.';
-  response.status(500).json({
+  const apiError = normalizeApiError(error);
+  response.status(apiError.status).json({
     error: {
-      code: 'UNKNOWN',
-      message,
-      recoverable: true,
+      code: apiError.code,
+      message: apiError.message,
+      recoverable: apiError.recoverable,
     },
   });
 });
@@ -227,18 +229,21 @@ function upsertCaption(captions: CaptionSegment[], caption: CaptionSegment): Cap
   return [...withoutCurrent, caption].sort((left, right) => left.startMs - right.startMs);
 }
 
-function parseStartSessionRequest(value: unknown): StartSessionRequest {
-  const body = value as Partial<StartSessionRequest>;
-
-  if (!body.deviceId || !body.sourceLanguage || !body.targetLanguage || !body.latencyMode) {
-    throw new Error('Invalid start session request.');
+function normalizeApiError(error: unknown) {
+  if (error instanceof ApiRequestError) {
+    return {
+      status: error.status,
+      code: error.code,
+      message: error.message,
+      recoverable: error.recoverable,
+    };
   }
 
   return {
-    deviceId: body.deviceId,
-    sourceLanguage: body.sourceLanguage,
-    targetLanguage: body.targetLanguage,
-    latencyMode: body.latencyMode,
+    status: 500,
+    code: 'UNKNOWN' as const,
+    message: error instanceof Error ? error.message : 'Unexpected API error.',
+    recoverable: true,
   };
 }
 
@@ -249,7 +254,10 @@ async function getAudioDiagnostics() {
       ready: devices.length > 0,
       deviceCount: devices.length,
       defaultDeviceLabel: devices.find((device) => device.isDefault)?.label,
-      message: devices.length > 0 ? 'Audio output capture is available.' : 'No active output devices found.',
+      message:
+        devices.length > 0
+          ? 'Audio output capture is available.'
+          : 'No active output devices found.',
     };
   } catch (error) {
     return {
@@ -280,6 +288,8 @@ function getAiDiagnostics(env: NodeJS.ProcessEnv) {
     transcriptionModel: env.ECHO_BRIDGE_TRANSCRIPTION_MODEL ?? 'gpt-4o-transcribe',
     translationModel: env.ECHO_BRIDGE_TRANSLATION_MODEL ?? 'gpt-4.1-mini',
     realtimeModel: env.ECHO_BRIDGE_REALTIME_MODEL ?? 'gpt-realtime',
-    message: hasApiKey ? 'OpenAI provider is configured.' : 'OPENAI_API_KEY is required for OpenAI provider modes.',
+    message: hasApiKey
+      ? 'OpenAI provider is configured.'
+      : 'OPENAI_API_KEY is required for OpenAI provider modes.',
   };
 }
