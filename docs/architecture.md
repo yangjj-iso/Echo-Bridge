@@ -17,6 +17,7 @@ Local API backend
 
 Electron main process
   -> connects desktop UI to the local API
+  -> starts the embedded local API in production desktop runs
   -> owns desktop lifecycle and native integration hooks
 
 Electron preload
@@ -47,6 +48,10 @@ The renderer does not talk directly to OpenAI or native audio APIs. API keys,
 provider clients, session orchestration, and correction policy stay behind the
 local API backend. The renderer receives typed application events and sends user
 intents through IPC to Electron main, which forwards them to the backend.
+In production desktop runs, Electron main hosts that backend in-process and
+closes it with the app lifecycle. Development runs keep the backend as a
+separate process for faster API iteration, and `ECHO_BRIDGE_API_URL` can point
+the desktop shell at any externally managed backend.
 
 The audio package does not know about transcription providers. It only exposes
 devices, capture sessions, audio format metadata, and audio chunks.

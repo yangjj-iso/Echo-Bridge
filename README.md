@@ -65,6 +65,12 @@ npm run dev
 ```
 
 `npm run dev` starts both the local API backend and the Electron desktop client.
+Development mode keeps the API as a separate process so backend logs and reloads
+stay easy to inspect. Production desktop runs start an embedded local API server
+inside Electron main unless `ECHO_BRIDGE_API_URL` points the app at an external
+backend. Set `ECHO_BRIDGE_API_PORT` to choose the local bind port; `0` lets the
+runtime choose an available ephemeral port.
+
 The first implementation uses mock audio and provider adapters so the UI,
 caption state, API boundary, and module contracts can be reviewed before native
 loopback capture and live AI credentials are added.
