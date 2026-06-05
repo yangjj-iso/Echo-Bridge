@@ -14,7 +14,15 @@ export interface ExportUrls {
   srt: string;
 }
 
+export interface HealthStatus {
+  ok: boolean;
+  service: string;
+  aiProvider: string;
+  aiProviderMode: string;
+}
+
 export interface EchoBridgeApi {
+  getHealth(): Promise<HealthStatus>;
   listDevices(): Promise<AudioDevice[]>;
   startSession(request: StartSessionRequest): Promise<{ sessionId: string }>;
   stopSession(): Promise<CaptionSegment[]>;
@@ -28,6 +36,7 @@ export interface EchoBridgeApi {
 }
 
 const api: EchoBridgeApi = {
+  getHealth: () => ipcRenderer.invoke('health:get') as Promise<HealthStatus>,
   listDevices: () => ipcRenderer.invoke('devices:list') as Promise<AudioDevice[]>,
   startSession: (request) =>
     ipcRenderer.invoke('session:start', request) as Promise<{ sessionId: string }>,

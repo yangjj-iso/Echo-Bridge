@@ -43,31 +43,37 @@ export class InterpretationPipeline {
     emit({ type: 'session.status', status: 'starting' });
     await this.#transcriptionProvider.start?.(request);
 
-    this.#captureSession = await this.#audioSource.start(
-      request.deviceId,
-      (chunk) => {
-        this.#processing = this.#processing
-          .then(async () => {
-            const transcripts = await this.#transcriptionProvider.acceptAudio(chunk);
+    try {
+      this.#captureSession = await this.#audioSource.start(
+        request.deviceId,
+        (chunk) => {
+          this.#processing = this.#processing
+            .then(async () => {
+              const transcripts = await this.#transcriptionProvider.acceptAudio(chunk);
 
-            for (const transcript of transcripts) {
-              await this.#acceptTranscript(transcript, emit);
-            }
-          })
-          .catch((error: unknown) => {
-            emit({
-              type: 'app.error',
-              error: normalizePipelineError(error),
+              for (const transcript of transcripts) {
+                await this.#acceptTranscript(transcript, emit);
+              }
+            })
+            .catch((error: unknown) => {
+              emit({
+                type: 'app.error',
+                error: normalizePipelineError(error),
+              });
             });
+        },
+        (error) => {
+          emit({
+            type: 'app.error',
+            error: normalizePipelineError(error),
           });
-      },
-      (error) => {
-        emit({
-          type: 'app.error',
-          error: normalizePipelineError(error),
-        });
-      },
-    );
+        },
+      );
+    } catch (error) {
+      await this.#transcriptionProvider.close();
+      emit({ type: 'session.status', status: 'idle' });
+      throw error;
+    }
 
     emit({ type: 'session.status', status: 'listening' });
     return { sessionId: this.#captureSession.id };

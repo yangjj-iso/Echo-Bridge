@@ -89,6 +89,10 @@ ipcMain.handle('devices:list', async () => {
   return payload.devices;
 });
 
+ipcMain.handle('health:get', async () => {
+  return requestJson('/health');
+});
+
 ipcMain.handle('session:start', async (_event, request: StartSessionRequest) => {
   return requestJson<{ sessionId: string }>('/sessions', {
     method: 'POST',

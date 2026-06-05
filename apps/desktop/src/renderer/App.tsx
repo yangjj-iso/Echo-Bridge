@@ -32,8 +32,10 @@ function App() {
   const [history, setHistory] = useState<SessionHistoryItem[]>([]);
   const [viewingHistoryId, setViewingHistoryId] = useState<string | undefined>();
   const [lastError, setLastError] = useState<string | undefined>();
+  const [providerMode, setProviderMode] = useState('unknown');
 
   useEffect(() => {
+    void echoBridge.getHealth().then((health) => setProviderMode(health.aiProviderMode));
     void echoBridge.getExportUrls().then(setExportUrls);
     void refreshHistory();
     void echoBridge.getCurrentRecord().then(({ record }) => {
@@ -162,6 +164,7 @@ function App() {
         <Metric icon={<Languages size={18} />} label="Language" value="English -> Chinese" />
         <Metric icon={<Captions size={18} />} label="Captions" value={String(captions.length)} />
         <Metric icon={<Wand2 size={18} />} label="Revisions" value={String(revisedCount)} />
+        <Metric label="Provider" value={providerMode} />
         <Metric label="State" value={status} />
       </section>
 
@@ -245,6 +248,9 @@ function createBrowserEchoBridgeApi(): Window['echoBridge'] {
   const eventsUrl = apiBaseUrl.replace(/^http/, 'ws') + '/events';
 
   return {
+    getHealth() {
+      return requestJson(`${apiBaseUrl}/health`);
+    },
     async listDevices() {
       const payload = await requestJson<{ devices: AudioDevice[] }>(`${apiBaseUrl}/devices`);
       return payload.devices;

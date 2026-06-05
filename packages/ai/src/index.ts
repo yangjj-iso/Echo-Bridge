@@ -11,6 +11,7 @@ export interface AiProviders {
   transcriptionProvider: TranscriptionProvider;
   translationProvider: TranslationProvider;
   providerName: 'mock' | 'openai';
+  providerMode: 'mock' | 'buffered' | 'realtime';
 }
 
 export interface AiProviderConfig {
@@ -37,6 +38,7 @@ export function createAiProviders(config: AiProviderConfig): AiProviders {
   if (config.provider !== 'openai') {
     return {
       providerName: 'mock',
+      providerMode: 'mock',
       transcriptionProvider: new MockTranscriptionProvider(),
       translationProvider: new MockTranslationProvider(),
     };
@@ -55,6 +57,7 @@ export function createAiProviders(config: AiProviderConfig): AiProviders {
   if (config.openAiMode === 'realtime') {
     return {
       providerName: 'openai',
+      providerMode: 'realtime',
       transcriptionProvider: new OpenAiRealtimeTranslationProvider({
         apiKey: config.apiKey,
         model: config.realtimeModel ?? 'gpt-realtime',
@@ -65,6 +68,7 @@ export function createAiProviders(config: AiProviderConfig): AiProviders {
 
   return {
     providerName: 'openai',
+    providerMode: 'buffered',
     transcriptionProvider: new OpenAiBufferedTranscriptionProvider({
       client,
       model: config.transcriptionModel ?? 'gpt-4o-transcribe',
