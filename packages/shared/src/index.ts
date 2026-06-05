@@ -68,6 +68,20 @@ export interface AppError {
   cause?: string;
 }
 
+export class EchoBridgeError extends Error implements AppError {
+  readonly code: AppErrorCode;
+  readonly recoverable: boolean;
+  override readonly cause?: string;
+
+  constructor(error: AppError) {
+    super(error.message);
+    this.name = 'EchoBridgeError';
+    this.code = error.code;
+    this.recoverable = error.recoverable;
+    this.cause = error.cause;
+  }
+}
+
 export type AppEvent =
   | { type: 'devices.updated'; devices: AudioDevice[] }
   | { type: 'session.status'; status: SessionStatus }
