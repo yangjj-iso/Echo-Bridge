@@ -1,4 +1,5 @@
 export type LanguageCode = 'en' | 'zh-CN' | 'auto';
+export type TargetLanguageCode = Exclude<LanguageCode, 'auto'>;
 
 export type SessionStatus = 'idle' | 'starting' | 'listening' | 'paused' | 'stopping' | 'error';
 
@@ -73,6 +74,7 @@ export interface SessionHistoryItem {
 export type AppErrorCode =
   | 'AUDIO_DEVICE_NOT_FOUND'
   | 'AUDIO_CAPTURE_FAILED'
+  | 'INVALID_REQUEST'
   | 'TRANSCRIPTION_FAILED'
   | 'TRANSLATION_FAILED'
   | 'SESSION_NOT_RUNNING'
@@ -110,6 +112,6 @@ export type AppEvent =
 export interface StartSessionRequest {
   deviceId: string;
   sourceLanguage: LanguageCode;
-  targetLanguage: LanguageCode;
+  targetLanguage: TargetLanguageCode;
   latencyMode: 'low' | 'balanced' | 'accurate';
 }
