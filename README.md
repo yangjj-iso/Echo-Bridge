@@ -69,6 +69,7 @@ To enable real OpenAI-backed providers in the local API:
 ```bash
 ECHO_BRIDGE_AI_PROVIDER=openai
 OPENAI_API_KEY=sk-your-key
+ECHO_BRIDGE_OPENAI_MODE=buffered
 ECHO_BRIDGE_TRANSCRIPTION_MODEL=gpt-4o-transcribe
 ECHO_BRIDGE_TRANSLATION_MODEL=gpt-4.1-mini
 ```
@@ -78,6 +79,11 @@ Current implementation notes:
 - Transcription provider buffers PCM chunks and sends them to the OpenAI
   speech-to-text API.
 - Translation provider uses the Responses API with recent caption context.
+- Set `ECHO_BRIDGE_OPENAI_MODE=realtime` and `ECHO_BRIDGE_REALTIME_MODEL=gpt-realtime`
+  to use the OpenAI Realtime WebSocket path. In realtime mode the model is
+  instructed to emit translated Chinese text directly, so the pipeline can skip
+  the second translation request when transcript events already include a
+  translation.
 - Mock mode remains the default for demos, tests, and CI.
 
 ## Delivery Principles

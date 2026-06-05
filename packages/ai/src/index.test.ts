@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { createAiProviders } from './index.js';
+import { OpenAiRealtimeTranslationProvider, createAiProviders } from './index.js';
 
 describe('createAiProviders', () => {
   it('uses mock providers by default', () => {
@@ -13,5 +13,15 @@ describe('createAiProviders', () => {
 
   it('creates OpenAI providers when configured with an API key', () => {
     expect(createAiProviders({ provider: 'openai', apiKey: 'sk-test' }).providerName).toBe('openai');
+  });
+
+  it('can create a realtime translation transcription provider', () => {
+    const providers = createAiProviders({
+      provider: 'openai',
+      apiKey: 'sk-test',
+      openAiMode: 'realtime',
+    });
+
+    expect(providers.transcriptionProvider).toBeInstanceOf(OpenAiRealtimeTranslationProvider);
   });
 });

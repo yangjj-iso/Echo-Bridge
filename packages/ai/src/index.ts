@@ -1,6 +1,7 @@
 import OpenAI, { toFile } from 'openai';
+import WebSocket from 'ws';
 
-import type { AudioChunk, CaptionRevision, CaptionSegment } from '@echo-bridge/shared';
+import type { AudioChunk, CaptionRevision, CaptionSegment, StartSessionRequest } from '@echo-bridge/shared';
 import type { TranscriptEvent, TranscriptionProvider } from '@echo-bridge/transcription';
 import { MockTranscriptionProvider } from '@echo-bridge/transcription';
 import type { TranslationProvider, TranslationResult } from '@echo-bridge/translation';
@@ -15,6 +16,8 @@ export interface AiProviders {
 export interface AiProviderConfig {
   provider?: string;
   apiKey?: string;
+  openAiMode?: string;
+  realtimeModel?: string;
   transcriptionModel?: string;
   translationModel?: string;
 }
@@ -23,6 +26,8 @@ export function createAiProvidersFromEnv(env: NodeJS.ProcessEnv = process.env): 
   return createAiProviders({
     provider: env.ECHO_BRIDGE_AI_PROVIDER,
     apiKey: env.OPENAI_API_KEY,
+    openAiMode: env.ECHO_BRIDGE_OPENAI_MODE,
+    realtimeModel: env.ECHO_BRIDGE_REALTIME_MODEL,
     transcriptionModel: env.ECHO_BRIDGE_TRANSCRIPTION_MODEL,
     translationModel: env.ECHO_BRIDGE_TRANSLATION_MODEL,
   });
@@ -42,6 +47,21 @@ export function createAiProviders(config: AiProviderConfig): AiProviders {
   }
 
   const client = new OpenAI({ apiKey: config.apiKey });
+  const translationProvider = new OpenAiTranslationProvider({
+    client,
+    model: config.translationModel ?? 'gpt-4.1-mini',
+  });
+
+  if (config.openAiMode === 'realtime') {
+    return {
+      providerName: 'openai',
+      transcriptionProvider: new OpenAiRealtimeTranslationProvider({
+        apiKey: config.apiKey,
+        model: config.realtimeModel ?? 'gpt-realtime',
+      }),
+      translationProvider,
+    };
+  }
 
   return {
     providerName: 'openai',
@@ -49,10 +69,7 @@ export function createAiProviders(config: AiProviderConfig): AiProviders {
       client,
       model: config.transcriptionModel ?? 'gpt-4o-transcribe',
     }),
-    translationProvider: new OpenAiTranslationProvider({
-      client,
-      model: config.translationModel ?? 'gpt-4.1-mini',
-    }),
+    translationProvider,
   };
 }
 
@@ -110,6 +127,297 @@ export class OpenAiBufferedTranscriptionProvider implements TranscriptionProvide
 
   async close(): Promise<void> {
     this.#chunks.length = 0;
+  }
+}
+
+interface OpenAiRealtimeTranslationOptions {
+  apiKey: string;
+  model: string;
+  url?: string;
+  connectTimeoutMs?: number;
+}
+
+type RealtimeTranslationEvent =
+  | {
+      type: 'session.updated';
+    }
+  | {
+      type: 'conversation.item.input_audio_transcription.delta';
+      item_id?: string;
+      delta?: string;
+    }
+  | {
+      type: 'conversation.item.input_audio_transcription.completed';
+      item_id?: string;
+      transcript?: string;
+    }
+  | {
+      type:
+        | 'response.audio_transcript.delta'
+        | 'response.output_audio_transcript.delta'
+        | 'response.output_transcript.delta'
+        | 'response.output_text.delta'
+        | 'response.text.delta';
+      item_id?: string;
+      delta?: string;
+    }
+  | {
+      type:
+        | 'response.audio_transcript.done'
+        | 'response.output_audio_transcript.done'
+        | 'response.output_transcript.done'
+        | 'response.output_text.done'
+        | 'response.text.done';
+      item_id?: string;
+      transcript?: string;
+      text?: string;
+    }
+  | {
+      type: 'error';
+      error?: {
+        message?: string;
+      };
+    }
+  | {
+      type: string;
+      item_id?: string;
+      delta?: string;
+      transcript?: string;
+      text?: string;
+      error?: {
+        message?: string;
+      };
+    };
+
+interface RealtimeTranscriptDraft {
+  id: string;
+  startMs: number;
+  sourceText: string;
+  translatedText: string;
+  emittedSourceLength: number;
+  emittedTranslatedLength: number;
+  final: boolean;
+}
+
+export class OpenAiRealtimeTranslationProvider implements TranscriptionProvider {
+  readonly #apiKey: string;
+  readonly #model: string;
+  readonly #url: string;
+  readonly #connectTimeoutMs: number;
+  readonly #pending: TranscriptEvent[] = [];
+  readonly #drafts = new Map<string, RealtimeTranscriptDraft>();
+  #socket?: WebSocket;
+  #lastError?: Error;
+  #segmentIndex = 0;
+  #lastStartMs = 0;
+
+  constructor(options: OpenAiRealtimeTranslationOptions) {
+    this.#apiKey = options.apiKey;
+    this.#model = options.model;
+    this.#url = options.url ?? 'wss://api.openai.com/v1/realtime';
+    this.#connectTimeoutMs = options.connectTimeoutMs ?? 10_000;
+  }
+
+  async start(request: StartSessionRequest): Promise<void> {
+    this.#pending.length = 0;
+    this.#drafts.clear();
+    this.#lastError = undefined;
+    this.#segmentIndex = 0;
+    this.#lastStartMs = 0;
+    this.#socket = await this.#connect();
+    this.#send({
+      type: 'session.update',
+      session: {
+        type: 'realtime',
+        output_modalities: ['text'],
+        audio: {
+          input: {
+            format: {
+              type: 'audio/pcm',
+              rate: 24000,
+            },
+            transcription: {
+              model: 'gpt-4o-transcribe',
+              language: request.sourceLanguage === 'auto' ? undefined : request.sourceLanguage,
+            },
+            turn_detection: {
+              type: 'server_vad',
+            },
+          },
+        },
+        instructions:
+          'Translate the incoming audio into concise Simplified Chinese subtitles. Keep each subtitle short enough for live captions.',
+      },
+    });
+  }
+
+  async acceptAudio(chunk: AudioChunk): Promise<TranscriptEvent[]> {
+    this.#throwIfFailed();
+    const socket = this.#socket;
+    if (!socket || socket.readyState !== WebSocket.OPEN) {
+      return this.#drainPending();
+    }
+
+    this.#send({
+      type: 'input_audio_buffer.append',
+      audio: Buffer.from(resamplePcm16Mono(chunk.data, chunk.format.sampleRate, 24000)).toString('base64'),
+    });
+
+    this.#throwIfFailed();
+    return this.#drainPending();
+  }
+
+  async close(): Promise<TranscriptEvent[]> {
+    const socket = this.#socket;
+    if (socket && socket.readyState === WebSocket.OPEN) {
+      this.#send({ type: 'input_audio_buffer.commit' });
+      this.#send({ type: 'response.create' });
+      await wait(750);
+      socket.close();
+    }
+
+    this.#socket = undefined;
+    this.#throwIfFailed();
+    const events = [...this.#drainPending()];
+
+    for (const draft of this.#drafts.values()) {
+      if (!draft.final && (draft.sourceText || draft.translatedText)) {
+        events.push(this.#toTranscriptEvent(draft, true));
+      }
+    }
+
+    this.#drafts.clear();
+    return events;
+  }
+
+  async #connect(): Promise<WebSocket> {
+    const socket = new WebSocket(`${this.#url}?model=${encodeURIComponent(this.#model)}`, {
+      headers: {
+        Authorization: `Bearer ${this.#apiKey}`,
+      },
+    });
+
+    socket.on('message', (data) => {
+      try {
+        this.#handleMessage(data.toString());
+      } catch (error) {
+        this.#lastError = error instanceof Error ? error : new Error(String(error));
+      }
+    });
+
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        socket.close();
+        reject(new Error('Timed out connecting to OpenAI realtime translation.'));
+      }, this.#connectTimeoutMs);
+
+      socket.once('open', () => {
+        clearTimeout(timer);
+        resolve(socket);
+      });
+
+      socket.once('error', (error) => {
+        clearTimeout(timer);
+        reject(error);
+      });
+    });
+  }
+
+  #handleMessage(raw: string): void {
+    const event = JSON.parse(raw) as RealtimeTranslationEvent;
+
+    if (event.type === 'error') {
+      this.#lastError = new Error(event.error?.message ?? 'OpenAI realtime translation error.');
+      return;
+    }
+
+    if (isSourceTranscriptEvent(event)) {
+      const draft = this.#draftFor(event.item_id);
+      if ('delta' in event && event.delta) {
+        draft.sourceText += event.delta;
+      }
+      if ('transcript' in event && event.transcript) {
+        draft.sourceText = event.transcript;
+      }
+      this.#queueIfChanged(draft, event.type.endsWith('.completed'));
+      return;
+    }
+
+    if (isTranslatedTranscriptEvent(event)) {
+      const draft = this.#draftFor(event.item_id);
+      if ('delta' in event && event.delta) {
+        draft.translatedText += event.delta;
+      }
+      if ('transcript' in event && event.transcript) {
+        draft.translatedText = event.transcript;
+      }
+      if ('text' in event && event.text) {
+        draft.translatedText = event.text;
+      }
+      this.#queueIfChanged(draft, event.type.endsWith('.done'));
+    }
+  }
+
+  #draftFor(itemId?: string): RealtimeTranscriptDraft {
+    const key = itemId ?? `realtime-${this.#segmentIndex + 1}`;
+    const current = this.#drafts.get(key);
+    if (current) {
+      return current;
+    }
+
+    this.#segmentIndex += 1;
+    const draft: RealtimeTranscriptDraft = {
+      id: `realtime-transcript-${this.#segmentIndex}`,
+      startMs: this.#lastStartMs,
+      sourceText: '',
+      translatedText: '',
+      emittedSourceLength: 0,
+      emittedTranslatedLength: 0,
+      final: false,
+    };
+    this.#lastStartMs += 2_000;
+    this.#drafts.set(key, draft);
+    return draft;
+  }
+
+  #queueIfChanged(draft: RealtimeTranscriptDraft, final: boolean): void {
+    if (
+      draft.sourceText.length === draft.emittedSourceLength &&
+      draft.translatedText.length === draft.emittedTranslatedLength &&
+      draft.final === final
+    ) {
+      return;
+    }
+
+    draft.emittedSourceLength = draft.sourceText.length;
+    draft.emittedTranslatedLength = draft.translatedText.length;
+    draft.final = final || draft.final;
+    this.#pending.push(this.#toTranscriptEvent(draft, draft.final));
+  }
+
+  #toTranscriptEvent(draft: RealtimeTranscriptDraft, isFinal: boolean): TranscriptEvent {
+    return {
+      id: draft.id,
+      startMs: draft.startMs,
+      endMs: isFinal ? draft.startMs + 1_800 : undefined,
+      text: draft.sourceText.trim() || 'Audio segment',
+      translatedText: draft.translatedText.trim() || undefined,
+      isFinal,
+    };
+  }
+
+  #drainPending(): TranscriptEvent[] {
+    return this.#pending.splice(0);
+  }
+
+  #send(payload: unknown): void {
+    this.#socket?.send(JSON.stringify(payload));
+  }
+
+  #throwIfFailed(): void {
+    if (this.#lastError) {
+      throw this.#lastError;
+    }
   }
 }
 
@@ -190,6 +498,76 @@ function isCaptionRevision(value: unknown): value is CaptionRevision {
     typeof candidate.revision === 'number' &&
     typeof candidate.reason === 'string'
   );
+}
+
+type SourceTranscriptEvent = Extract<
+  RealtimeTranslationEvent,
+  {
+    type:
+      | 'conversation.item.input_audio_transcription.delta'
+      | 'conversation.item.input_audio_transcription.completed';
+  }
+>;
+
+type TranslatedTranscriptEvent = Extract<
+  RealtimeTranslationEvent,
+  {
+    type:
+      | 'response.audio_transcript.delta'
+      | 'response.output_audio_transcript.delta'
+      | 'response.output_transcript.delta'
+      | 'response.output_text.delta'
+      | 'response.text.delta'
+      | 'response.audio_transcript.done'
+      | 'response.output_audio_transcript.done'
+      | 'response.output_transcript.done'
+      | 'response.output_text.done'
+      | 'response.text.done';
+  }
+>;
+
+function isSourceTranscriptEvent(event: RealtimeTranslationEvent): event is SourceTranscriptEvent {
+  return (
+    event.type === 'conversation.item.input_audio_transcription.delta' ||
+    event.type === 'conversation.item.input_audio_transcription.completed'
+  );
+}
+
+function isTranslatedTranscriptEvent(event: RealtimeTranslationEvent): event is TranslatedTranscriptEvent {
+  return (
+    event.type === 'response.audio_transcript.delta' ||
+    event.type === 'response.output_audio_transcript.delta' ||
+    event.type === 'response.output_transcript.delta' ||
+    event.type === 'response.output_text.delta' ||
+    event.type === 'response.text.delta' ||
+    event.type === 'response.audio_transcript.done' ||
+    event.type === 'response.output_audio_transcript.done' ||
+    event.type === 'response.output_transcript.done' ||
+    event.type === 'response.output_text.done' ||
+    event.type === 'response.text.done'
+  );
+}
+
+function wait(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function resamplePcm16Mono(pcm: Uint8Array, sourceSampleRate: number, targetSampleRate: number): Uint8Array {
+  if (sourceSampleRate === targetSampleRate) {
+    return pcm;
+  }
+
+  const sourceSamples = new Int16Array(pcm.buffer, pcm.byteOffset, Math.floor(pcm.byteLength / 2));
+  const ratio = sourceSampleRate / targetSampleRate;
+  const outputSampleCount = Math.max(1, Math.round(sourceSamples.length / ratio));
+  const output = new Int16Array(outputSampleCount);
+
+  for (let index = 0; index < outputSampleCount; index += 1) {
+    const sourceIndex = Math.min(sourceSamples.length - 1, Math.round(index * ratio));
+    output[index] = sourceSamples[sourceIndex] ?? 0;
+  }
+
+  return new Uint8Array(output.buffer);
 }
 
 function concatBytes(chunks: Uint8Array[]): Uint8Array {

@@ -2,8 +2,8 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { MockAudioCaptureSource } from '@echo-bridge/audio';
 import type { AppEvent } from '@echo-bridge/shared';
-import { MockTranscriptionProvider } from '@echo-bridge/transcription';
-import { MockTranslationProvider } from '@echo-bridge/translation';
+import { MockTranscriptionProvider, type TranscriptionProvider } from '@echo-bridge/transcription';
+import { MockTranslationProvider, type TranslationProvider } from '@echo-bridge/translation';
 
 import { InterpretationPipeline } from './index.js';
 
@@ -120,4 +120,52 @@ describe('InterpretationPipeline', () => {
     expect(secondSession).toHaveLength(2);
     expect(secondSession.map((caption) => caption.id)).toEqual(['transcript-1', 'transcript-2']);
   });
+
+  it('uses translated transcript events without a second translation request', async () => {
+    vi.useFakeTimers();
+    const translateSegment = vi.fn<TranslationProvider['translateSegment']>();
+    const pipeline = new InterpretationPipeline({
+      audioSource: new MockAudioCaptureSource(),
+      transcriptionProvider: new TranslatedMockTranscriptionProvider(),
+      translationProvider: {
+        translateSegment,
+      },
+    });
+
+    await pipeline.start(
+      {
+        deviceId: 'default-output',
+        sourceLanguage: 'en',
+        targetLanguage: 'zh-CN',
+        latencyMode: 'balanced',
+      },
+      vi.fn(),
+    );
+    await vi.advanceTimersByTimeAsync(500);
+    const captions = await pipeline.stop();
+    vi.useRealTimers();
+
+    expect(captions).toHaveLength(1);
+    expect(captions[0]?.translatedText).toBe('已经翻译好的实时字幕。');
+    expect(translateSegment).not.toHaveBeenCalled();
+  });
 });
+
+class TranslatedMockTranscriptionProvider implements TranscriptionProvider {
+  async acceptAudio() {
+    return [
+      {
+        id: 'translated-transcript-1',
+        startMs: 0,
+        endMs: 900,
+        text: 'A realtime translated caption.',
+        translatedText: '已经翻译好的实时字幕。',
+        isFinal: true,
+      },
+    ];
+  }
+
+  async close() {
+    return [];
+  }
+}
