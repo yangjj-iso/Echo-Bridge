@@ -23,6 +23,7 @@ import './styles.css';
 
 function App() {
   const isMiniView = new URLSearchParams(window.location.search).get('view') === 'mini';
+  const echoBridge = useMemo(() => window.echoBridge ?? createBrowserEchoBridgeApi(), []);
   const [devices, setDevices] = useState<AudioDevice[]>([]);
   const [selectedDeviceId, setSelectedDeviceId] = useState('');
   const [status, setStatus] = useState<SessionStatus>('idle');
@@ -33,21 +34,21 @@ function App() {
   const [lastError, setLastError] = useState<string | undefined>();
 
   useEffect(() => {
-    void window.echoBridge.getExportUrls().then(setExportUrls);
+    void echoBridge.getExportUrls().then(setExportUrls);
     void refreshHistory();
-    void window.echoBridge.getCurrentRecord().then(({ record }) => {
+    void echoBridge.getCurrentRecord().then(({ record }) => {
       setStatus(record.status);
       setCaptions(record.captions);
     });
-    void window.echoBridge.listDevices().then((items) => {
+    void echoBridge.listDevices().then((items) => {
       setDevices(items);
       setSelectedDeviceId(items.find((device) => device.isDefault)?.id ?? items[0]?.id ?? '');
     });
 
-    return window.echoBridge.onEvent((event) => {
+    return echoBridge.onEvent((event) => {
       handleAppEvent(event, setDevices, setStatus, setCaptions, setLastError);
     });
-  }, []);
+  }, [echoBridge]);
 
   const activeCaption = captions.at(-1);
   const canStart = selectedDeviceId && (status === 'idle' || status === 'paused' || status === 'error');
@@ -66,8 +67,8 @@ function App() {
     setLastError(undefined);
     setViewingHistoryId(undefined);
     setCaptions([]);
-    setExportUrls(await window.echoBridge.getExportUrls());
-    await window.echoBridge.startSession({
+    setExportUrls(await echoBridge.getExportUrls());
+    await echoBridge.startSession({
       deviceId: selectedDeviceId,
       sourceLanguage: 'en',
       targetLanguage: 'zh-CN',
@@ -76,20 +77,20 @@ function App() {
   }
 
   async function stopSession() {
-    const finalCaptions = await window.echoBridge.stopSession();
+    const finalCaptions = await echoBridge.stopSession();
     setCaptions(finalCaptions);
     await refreshHistory();
   }
 
   async function refreshHistory() {
-    const { sessions } = await window.echoBridge.listHistory();
+    const { sessions } = await echoBridge.listHistory();
     setHistory(sessions);
   }
 
   async function loadHistory(sessionId: string) {
     const [{ record }, urls] = await Promise.all([
-      window.echoBridge.getHistoryRecord(sessionId),
-      window.echoBridge.getHistoryExportUrls(sessionId),
+      echoBridge.getHistoryRecord(sessionId),
+      echoBridge.getHistoryExportUrls(sessionId),
     ]);
     setViewingHistoryId(sessionId);
     setCaptions(record.captions);
@@ -98,8 +99,8 @@ function App() {
 
   async function restoreCurrentRecord() {
     const [{ record }, urls] = await Promise.all([
-      window.echoBridge.getCurrentRecord(),
-      window.echoBridge.getExportUrls(),
+      echoBridge.getCurrentRecord(),
+      echoBridge.getExportUrls(),
     ]);
     setViewingHistoryId(undefined);
     setStatus(record.status);
@@ -142,7 +143,7 @@ function App() {
         </label>
 
         <div className="actions">
-          <button onClick={() => void window.echoBridge.openMiniWindow()}>
+          <button onClick={() => void echoBridge.openMiniWindow()}>
             <PictureInPicture2 size={18} />
             Mini
           </button>
@@ -239,6 +240,78 @@ function App() {
   );
 }
 
+function createBrowserEchoBridgeApi(): Window['echoBridge'] {
+  const apiBaseUrl = 'http://127.0.0.1:4317';
+  const eventsUrl = apiBaseUrl.replace(/^http/, 'ws') + '/events';
+
+  return {
+    async listDevices() {
+      const payload = await requestJson<{ devices: AudioDevice[] }>(`${apiBaseUrl}/devices`);
+      return payload.devices;
+    },
+    startSession(request) {
+      return requestJson<{ sessionId: string }>(`${apiBaseUrl}/sessions`, {
+        method: 'POST',
+        body: JSON.stringify(request),
+      });
+    },
+    async stopSession() {
+      const payload = await requestJson<{ captions: CaptionSegment[] }>(`${apiBaseUrl}/sessions/stop`, {
+        method: 'POST',
+      });
+      return payload.captions;
+    },
+    getCurrentRecord() {
+      return requestJson<{ record: { status: SessionStatus; captions: CaptionSegment[] }; stats: unknown }>(
+        `${apiBaseUrl}/sessions/current/record`,
+      );
+    },
+    async getExportUrls() {
+      return {
+        markdown: `${apiBaseUrl}/sessions/current/export.md`,
+        srt: `${apiBaseUrl}/sessions/current/export.srt`,
+      };
+    },
+    listHistory() {
+      return requestJson<{ sessions: SessionHistoryItem[] }>(`${apiBaseUrl}/sessions/history`);
+    },
+    getHistoryRecord(sessionId) {
+      return requestJson(`${apiBaseUrl}/sessions/history/${encodeURIComponent(sessionId)}`);
+    },
+    async getHistoryExportUrls(sessionId) {
+      const encoded = encodeURIComponent(sessionId);
+      return {
+        markdown: `${apiBaseUrl}/sessions/history/${encoded}/export.md`,
+        srt: `${apiBaseUrl}/sessions/history/${encoded}/export.srt`,
+      };
+    },
+    async openMiniWindow() {},
+    onEvent(listener) {
+      const socket = new WebSocket(eventsUrl);
+      socket.onmessage = (event) => {
+        listener(JSON.parse(event.data as string) as AppEvent);
+      };
+      return () => socket.close();
+    },
+  };
+}
+
+async function requestJson<T>(input: string, init?: RequestInit): Promise<T> {
+  const response = await fetch(input, {
+    ...init,
+    headers: {
+      'content-type': 'application/json',
+      ...init?.headers,
+    },
+  });
+
+  if (!response.ok) {
+    throw new Error(`EchoBridge request failed: ${response.status}`);
+  }
+
+  return (await response.json()) as T;
+}
+
 function handleAppEvent(
   event: AppEvent,
   setDevices: (devices: AudioDevice[]) => void,
@@ -252,6 +325,10 @@ function handleAppEvent(
       break;
     case 'session.status':
       setStatus(event.status);
+      if (event.status === 'starting') {
+        setCaptions([]);
+        setLastError(undefined);
+      }
       break;
     case 'caption.upserted':
       setCaptions((current) => {

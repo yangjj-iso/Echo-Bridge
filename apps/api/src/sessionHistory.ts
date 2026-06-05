@@ -1,10 +1,12 @@
 import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import { summarizeCaptions } from '@echo-bridge/captions';
 import type { SessionHistoryItem, SessionRecord } from '@echo-bridge/shared';
 
-const sessionsDir = path.resolve(process.cwd(), 'data/sessions');
+const moduleDirectory = path.dirname(fileURLToPath(import.meta.url));
+const sessionsDir = path.resolve(moduleDirectory, '../../../data/sessions');
 
 export async function saveSessionRecord(record: SessionRecord): Promise<SessionHistoryItem | undefined> {
   if (!record.sessionId || record.captions.length === 0) {

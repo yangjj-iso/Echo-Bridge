@@ -82,4 +82,42 @@ describe('InterpretationPipeline', () => {
       { type: 'session.status', status: 'listening' },
     ]);
   });
+
+  it('resets captions between completed sessions', async () => {
+    vi.useFakeTimers();
+    const pipeline = new InterpretationPipeline({
+      audioSource: new MockAudioCaptureSource(),
+      transcriptionProvider: new MockTranscriptionProvider(),
+      translationProvider: new MockTranslationProvider(),
+    });
+
+    await pipeline.start(
+      {
+        deviceId: 'default-output',
+        sourceLanguage: 'en',
+        targetLanguage: 'zh-CN',
+        latencyMode: 'balanced',
+      },
+      vi.fn(),
+    );
+    await vi.advanceTimersByTimeAsync(4_000);
+    const firstSession = await pipeline.stop();
+
+    await pipeline.start(
+      {
+        deviceId: 'default-output',
+        sourceLanguage: 'en',
+        targetLanguage: 'zh-CN',
+        latencyMode: 'balanced',
+      },
+      vi.fn(),
+    );
+    await vi.advanceTimersByTimeAsync(4_000);
+    const secondSession = await pipeline.stop();
+    vi.useRealTimers();
+
+    expect(firstSession).toHaveLength(2);
+    expect(secondSession).toHaveLength(2);
+    expect(secondSession.map((caption) => caption.id)).toEqual(['transcript-1', 'transcript-2']);
+  });
 });

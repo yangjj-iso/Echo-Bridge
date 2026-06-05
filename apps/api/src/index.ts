@@ -4,7 +4,7 @@ import { createServer } from 'node:http';
 import { WebSocketServer, type WebSocket } from 'ws';
 
 import { createAiProvidersFromEnv } from '@echo-bridge/ai';
-import { MockAudioCaptureSource } from '@echo-bridge/audio';
+import { createAudioCaptureSource } from '@echo-bridge/audio';
 import { exportMarkdown, exportSrt, summarizeCaptions } from '@echo-bridge/captions';
 import { InterpretationPipeline } from '@echo-bridge/pipeline';
 import type { AppEvent, CaptionSegment, SessionRecord, StartSessionRequest } from '@echo-bridge/shared';
@@ -12,7 +12,7 @@ import type { AppEvent, CaptionSegment, SessionRecord, StartSessionRequest } fro
 import { listSessionHistory, readSessionRecord, saveSessionRecord } from './sessionHistory.js';
 
 const port = Number(process.env.ECHO_BRIDGE_API_PORT ?? 4317);
-const audioSource = new MockAudioCaptureSource();
+const audioSource = createAudioCaptureSource();
 const aiProviders = createAiProvidersFromEnv();
 const pipeline = new InterpretationPipeline({
   audioSource,
@@ -48,6 +48,10 @@ app.get('/devices', async (_request, response, next) => {
 
 app.post('/sessions', async (request, response, next) => {
   try {
+    sessionRecord = {
+      status: 'starting',
+      captions: [],
+    };
     const result = await pipeline.start(parseStartSessionRequest(request.body), emit);
     sessionRecord = {
       sessionId: result.sessionId,
@@ -55,6 +59,7 @@ app.post('/sessions', async (request, response, next) => {
       status: 'listening',
       captions: [],
     };
+    emit({ type: 'session.status', status: 'listening' });
     response.status(201).json(result);
   } catch (error) {
     next(error);
