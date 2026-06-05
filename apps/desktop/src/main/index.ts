@@ -22,6 +22,7 @@ let eventSocket: WebSocket | undefined;
 
 function sendEvent(event: AppEvent): void {
   mainWindow?.webContents.send('app:event', event);
+  miniWindow?.webContents.send('app:event', event);
 }
 
 async function createWindow(): Promise<void> {

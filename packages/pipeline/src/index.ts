@@ -39,48 +39,58 @@ export class InterpretationPipeline {
       await this.stop(emit);
     }
 
+    this.#captions.clear();
     emit({ type: 'session.status', status: 'starting' });
 
-    this.#captureSession = await this.#audioSource.start(request.deviceId, (chunk) => {
-      this.#processing = this.#processing
-        .then(async () => {
-          const transcripts = await this.#transcriptionProvider.acceptAudio(chunk);
+    this.#captureSession = await this.#audioSource.start(
+      request.deviceId,
+      (chunk) => {
+        this.#processing = this.#processing
+          .then(async () => {
+            const transcripts = await this.#transcriptionProvider.acceptAudio(chunk);
 
-          for (const transcript of transcripts) {
-            const caption = this.#captions.upsert({
-              id: transcript.id,
-              startMs: transcript.startMs,
-              endMs: transcript.endMs,
-              sourceText: transcript.text,
-              status: transcript.isFinal ? 'final' : 'partial',
-              confidence: transcript.confidence,
-              revision: 0,
-            });
-            const translation = await this.#translationProvider.translateSegment(
-              caption,
-              this.#captions.list(),
-            );
-            const translatedCaption = this.#captions.upsert({
-              ...caption,
-              translatedText: translation.translatedText,
-            });
+            for (const transcript of transcripts) {
+              const caption = this.#captions.upsert({
+                id: transcript.id,
+                startMs: transcript.startMs,
+                endMs: transcript.endMs,
+                sourceText: transcript.text,
+                status: transcript.isFinal ? 'final' : 'partial',
+                confidence: transcript.confidence,
+                revision: 0,
+              });
+              const translation = await this.#translationProvider.translateSegment(
+                caption,
+                this.#captions.list(),
+              );
+              const translatedCaption = this.#captions.upsert({
+                ...caption,
+                translatedText: translation.translatedText,
+              });
 
-            emit({ type: 'caption.upserted', caption: translatedCaption });
+              emit({ type: 'caption.upserted', caption: translatedCaption });
 
-            for (const revision of translation.revisions) {
-              const revised = this.#captions.revise(revision);
-              emit({ type: 'caption.revised', revision });
-              emit({ type: 'caption.upserted', caption: revised });
+              for (const revision of translation.revisions) {
+                const revised = this.#captions.revise(revision);
+                emit({ type: 'caption.revised', revision });
+                emit({ type: 'caption.upserted', caption: revised });
+              }
             }
-          }
-        })
-        .catch((error: unknown) => {
-          emit({
-            type: 'app.error',
-            error: normalizePipelineError(error),
+          })
+          .catch((error: unknown) => {
+            emit({
+              type: 'app.error',
+              error: normalizePipelineError(error),
+            });
           });
+      },
+      (error) => {
+        emit({
+          type: 'app.error',
+          error: normalizePipelineError(error),
         });
-    });
+      },
+    );
 
     emit({ type: 'session.status', status: 'listening' });
     return { sessionId: this.#captureSession.id };

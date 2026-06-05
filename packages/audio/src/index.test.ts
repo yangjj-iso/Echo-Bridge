@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { EchoBridgeError } from '@echo-bridge/shared';
 
-import { MockAudioCaptureSource } from './index.js';
+import { MockAudioCaptureSource, WindowsAudioCaptureSource, createAudioCaptureSource } from './index.js';
 
 describe('MockAudioCaptureSource', () => {
   it('returns defensive copies of output devices', async () => {
@@ -49,5 +49,10 @@ describe('MockAudioCaptureSource', () => {
 
     expect(onChunk).toHaveBeenCalledTimes(2);
     vi.useRealTimers();
+  });
+
+  it('uses the Windows helper source on win32', () => {
+    expect(createAudioCaptureSource('win32')).toBeInstanceOf(WindowsAudioCaptureSource);
+    expect(createAudioCaptureSource('linux')).toBeInstanceOf(MockAudioCaptureSource);
   });
 });

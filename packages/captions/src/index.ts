@@ -12,6 +12,10 @@ export interface CaptionStats {
 export class CaptionStore {
   readonly #items = new Map<string, CaptionSegment>();
 
+  clear(): void {
+    this.#items.clear();
+  }
+
   upsert(caption: CaptionSegment): CaptionSegment {
     assertValidTiming(caption);
 
