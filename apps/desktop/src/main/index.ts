@@ -93,6 +93,10 @@ ipcMain.handle('health:get', async () => {
   return requestJson('/health');
 });
 
+ipcMain.handle('diagnostics:get', async () => {
+  return requestJson('/diagnostics');
+});
+
 ipcMain.handle('session:start', async (_event, request: StartSessionRequest) => {
   return requestJson<{ sessionId: string }>('/sessions', {
     method: 'POST',

@@ -33,9 +33,11 @@ function App() {
   const [viewingHistoryId, setViewingHistoryId] = useState<string | undefined>();
   const [lastError, setLastError] = useState<string | undefined>();
   const [providerMode, setProviderMode] = useState('unknown');
+  const [diagnostics, setDiagnostics] = useState<Awaited<ReturnType<typeof echoBridge.getDiagnostics>>>();
 
   useEffect(() => {
     void echoBridge.getHealth().then((health) => setProviderMode(health.aiProviderMode));
+    void echoBridge.getDiagnostics().then(setDiagnostics);
     void echoBridge.getExportUrls().then(setExportUrls);
     void refreshHistory();
     void echoBridge.getCurrentRecord().then(({ record }) => {
@@ -170,6 +172,18 @@ function App() {
 
       {lastError ? <div className="error-banner">{lastError}</div> : null}
 
+      {diagnostics ? (
+        <section className="diagnostics-panel">
+          <DiagnosticItem label="Audio" ready={diagnostics.audio.ready} message={diagnostics.audio.message} />
+          <DiagnosticItem label="AI" ready={diagnostics.ai.ready} message={diagnostics.ai.message} />
+          <DiagnosticItem
+            label="Mode"
+            ready={diagnostics.ok}
+            message={`${diagnostics.ai.provider} / ${diagnostics.ai.mode}`}
+          />
+        </section>
+      ) : null}
+
       <section className="live-caption">
         <p className="eyebrow">Now interpreting</p>
         <h2>{activeCaption?.translatedText ?? 'Waiting for audio...'}</h2>
@@ -251,6 +265,9 @@ function createBrowserEchoBridgeApi(): Window['echoBridge'] {
     getHealth() {
       return requestJson(`${apiBaseUrl}/health`);
     },
+    getDiagnostics() {
+      return requestJson(`${apiBaseUrl}/diagnostics`);
+    },
     async listDevices() {
       const payload = await requestJson<{ devices: AudioDevice[] }>(`${apiBaseUrl}/devices`);
       return payload.devices;
@@ -316,6 +333,26 @@ async function requestJson<T>(input: string, init?: RequestInit): Promise<T> {
   }
 
   return (await response.json()) as T;
+}
+
+function DiagnosticItem({
+  label,
+  ready,
+  message,
+}: {
+  label: string;
+  ready: boolean;
+  message: string;
+}) {
+  return (
+    <div className="diagnostic-item">
+      <span className={ready ? 'diagnostic-dot ready' : 'diagnostic-dot'} />
+      <div>
+        <strong>{label}</strong>
+        <p>{message}</p>
+      </div>
+    </div>
+  );
 }
 
 function handleAppEvent(
