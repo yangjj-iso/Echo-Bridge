@@ -1,0 +1,16 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "outDir": "dist",
+    "rootDir": "src",
+    "types": ["node"]
+  },
+  "references": [
+    { "path": "../../packages/audio" },
+    { "path": "../../packages/pipeline" },
+    { "path": "../../packages/shared" },
+    { "path": "../../packages/transcription" },
+    { "path": "../../packages/translation" }
+  ],
+  "include": ["src"]
+}

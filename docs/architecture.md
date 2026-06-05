@@ -10,10 +10,14 @@ produce useful records after a session ends.
 ## System Overview
 
 ```text
+Local API backend
+  -> owns interpretation pipeline and AI provider clients
+  -> manages realtime session state
+  -> exposes REST controls and WebSocket events
+
 Electron main process
-  -> manages native audio capture
-  -> owns AI provider clients
-  -> persists session state
+  -> connects desktop UI to the local API
+  -> owns desktop lifecycle and native integration hooks
 
 Electron preload
   -> exposes a narrow, typed bridge to the renderer
@@ -40,9 +44,9 @@ packages/captions
 ## Boundaries
 
 The renderer does not talk directly to OpenAI or native audio APIs. API keys,
-native helper processes, and session orchestration stay in the Electron main
-process. The renderer receives typed application events and sends user intents
-through IPC.
+provider clients, session orchestration, and correction policy stay behind the
+local API backend. The renderer receives typed application events and sends user
+intents through IPC to Electron main, which forwards them to the backend.
 
 The audio package does not know about transcription providers. It only exposes
 devices, capture sessions, audio format metadata, and audio chunks.
@@ -50,20 +54,23 @@ devices, capture sessions, audio format metadata, and audio chunks.
 The caption package does not know about UI components. It owns deterministic
 caption state transitions, revision counters, and export logic.
 
-The pipeline package owns interpretation session orchestration. Electron main
-process code should delegate the realtime flow to this package and only handle
-IPC, native process lifecycle, and renderer event forwarding.
+The pipeline package owns interpretation session orchestration. The API backend
+delegates the realtime flow to this package and exposes the result as a process
+boundary. Electron main should only handle IPC, desktop lifecycle, backend
+requests, and renderer event forwarding.
 
 ## Realtime Pipeline
 
-1. User selects an output audio device.
-2. Main process starts an audio capture source.
-3. Audio chunks stream into the transcription provider.
-4. Partial transcripts update the active caption line.
-5. Final transcripts are translated with recent context.
-6. The translation provider may propose revisions for recent caption items.
-7. Renderer receives caption upserts and revision events.
-8. Session end triggers summary and export generation.
+1. User selects an output audio device in the desktop UI.
+2. Electron main forwards the start request to the local API backend.
+3. API starts an audio capture source.
+4. Audio chunks stream into the transcription provider.
+5. Partial transcripts update the active caption line.
+6. Final transcripts are translated with recent context.
+7. The translation provider may propose revisions for recent caption items.
+8. API broadcasts caption upserts and revision events over WebSocket.
+9. Renderer receives caption events through Electron IPC.
+10. Session end triggers summary and export generation.
 
 ## Windows Audio Plan
 
