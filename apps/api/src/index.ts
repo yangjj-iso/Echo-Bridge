@@ -33,7 +33,12 @@ app.use(cors());
 app.use(express.json({ limit: '1mb' }));
 
 app.get('/health', (_request, response) => {
-  response.json({ ok: true, service: 'echo-bridge-api', aiProvider: aiProviders.providerName });
+  response.json({
+    ok: true,
+    service: 'echo-bridge-api',
+    aiProvider: aiProviders.providerName,
+    aiProviderMode: aiProviders.providerMode,
+  });
 });
 
 app.get('/devices', async (_request, response, next) => {

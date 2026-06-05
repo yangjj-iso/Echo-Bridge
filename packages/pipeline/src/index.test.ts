@@ -1,7 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 
+import type { AudioCaptureSource } from '@echo-bridge/audio';
 import { MockAudioCaptureSource } from '@echo-bridge/audio';
-import type { AppEvent } from '@echo-bridge/shared';
+import { EchoBridgeError, type AppEvent } from '@echo-bridge/shared';
 import { MockTranscriptionProvider, type TranscriptionProvider } from '@echo-bridge/transcription';
 import { MockTranslationProvider, type TranslationProvider } from '@echo-bridge/translation';
 
@@ -149,6 +150,40 @@ describe('InterpretationPipeline', () => {
     expect(captions[0]?.translatedText).toBe('已经翻译好的实时字幕。');
     expect(translateSegment).not.toHaveBeenCalled();
   });
+
+  it('closes a started transcription provider when audio capture fails to start', async () => {
+    const start = vi.fn<TranscriptionProvider['start']>();
+    const close = vi.fn<TranscriptionProvider['close']>();
+    const events: AppEvent[] = [];
+    const pipeline = new InterpretationPipeline({
+      audioSource: new FailingAudioCaptureSource(),
+      transcriptionProvider: {
+        start,
+        acceptAudio: vi.fn(),
+        close,
+      },
+      translationProvider: new MockTranslationProvider(),
+    });
+
+    await expect(
+      pipeline.start(
+        {
+          deviceId: 'default-output',
+          sourceLanguage: 'en',
+          targetLanguage: 'zh-CN',
+          latencyMode: 'balanced',
+        },
+        (event) => events.push(event),
+      ),
+    ).rejects.toMatchObject({ code: 'AUDIO_CAPTURE_FAILED' });
+
+    expect(start).toHaveBeenCalledTimes(1);
+    expect(close).toHaveBeenCalledTimes(1);
+    expect(events.filter((event) => event.type === 'session.status')).toEqual([
+      { type: 'session.status', status: 'starting' },
+      { type: 'session.status', status: 'idle' },
+    ]);
+  });
 });
 
 class TranslatedMockTranscriptionProvider implements TranscriptionProvider {
@@ -167,5 +202,19 @@ class TranslatedMockTranscriptionProvider implements TranscriptionProvider {
 
   async close() {
     return [];
+  }
+}
+
+class FailingAudioCaptureSource implements AudioCaptureSource {
+  async listOutputDevices() {
+    return [];
+  }
+
+  async start() {
+    throw new EchoBridgeError({
+      code: 'AUDIO_CAPTURE_FAILED',
+      message: 'Failed to open output device.',
+      recoverable: true,
+    });
   }
 }
