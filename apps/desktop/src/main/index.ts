@@ -25,7 +25,7 @@ async function createWindow(): Promise<void> {
     title: 'EchoBridge AI',
     backgroundColor: '#0f172a',
     webPreferences: {
-      preload: path.join(dirname, '../preload/index.js'),
+      preload: path.join(dirname, '../preload/index.cjs'),
       contextIsolation: true,
       nodeIntegration: false,
     },
