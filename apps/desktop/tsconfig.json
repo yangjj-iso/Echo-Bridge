@@ -7,8 +7,6 @@
     "rootDir": "src",
     "types": ["node", "vite/client"]
   },
-  "references": [
-    { "path": "../../packages/shared" }
-  ],
+  "references": [{ "path": "../api" }, { "path": "../../packages/shared" }],
   "include": ["src"]
 }

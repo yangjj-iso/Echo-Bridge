@@ -3,6 +3,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import WebSocket from 'ws';
 
+import { createEchoBridgeApiServer, type EchoBridgeApiServer } from '@echo-bridge/api';
 import type {
   AppEvent,
   AudioDevice,
@@ -13,12 +14,14 @@ import type {
 } from '@echo-bridge/shared';
 
 const dirname = path.dirname(fileURLToPath(import.meta.url));
-const apiBaseUrl = process.env.ECHO_BRIDGE_API_URL ?? 'http://127.0.0.1:4317';
-const apiEventsUrl = apiBaseUrl.replace(/^http/, 'ws') + '/events';
+let apiBaseUrl = process.env.ECHO_BRIDGE_API_URL ?? 'http://127.0.0.1:4317';
 
 let mainWindow: BrowserWindow | undefined;
 let miniWindow: BrowserWindow | undefined;
 let eventSocket: WebSocket | undefined;
+let embeddedApiServer: EchoBridgeApiServer | undefined;
+let embeddedApiStartup: Promise<void> | undefined;
+let embeddedApiShutdown: Promise<void> | undefined;
 
 function sendEvent(event: AppEvent): void {
   mainWindow?.webContents.send('app:event', event);
@@ -26,6 +29,8 @@ function sendEvent(event: AppEvent): void {
 }
 
 async function createWindow(): Promise<void> {
+  await ensureApiServer();
+
   mainWindow = new BrowserWindow({
     width: 1180,
     height: 780,
@@ -166,14 +171,18 @@ app.on('activate', () => {
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
-    eventSocket?.close();
+    void shutdownEmbeddedApiServer();
     app.quit();
   }
 });
 
+app.on('before-quit', () => {
+  void shutdownEmbeddedApiServer();
+});
+
 function connectEventSocket(): void {
   eventSocket?.close();
-  eventSocket = new WebSocket(apiEventsUrl);
+  eventSocket = new WebSocket(apiBaseUrl.replace(/^http/, 'ws') + '/events');
 
   eventSocket.on('message', (data) => {
     sendEvent(JSON.parse(data.toString()) as AppEvent);
@@ -190,6 +199,59 @@ function connectEventSocket(): void {
       },
     });
   });
+}
+
+async function ensureApiServer(): Promise<void> {
+  if (process.env.ECHO_BRIDGE_API_URL || process.env.VITE_DEV_SERVER_URL) {
+    return;
+  }
+
+  if (!embeddedApiStartup) {
+    embeddedApiStartup = startEmbeddedApiServer().catch(async (error: unknown) => {
+      await shutdownEmbeddedApiServer();
+      throw error;
+    });
+  }
+
+  await embeddedApiStartup;
+}
+
+async function startEmbeddedApiServer(): Promise<void> {
+  embeddedApiServer = createEchoBridgeApiServer(process.env);
+  const configuredPort = process.env.ECHO_BRIDGE_API_PORT;
+  const hasConfiguredPort = configuredPort !== undefined && configuredPort !== '';
+  const listenPort = hasConfiguredPort ? Number(configuredPort) : 4317;
+  const { url } = await embeddedApiServer.listen(listenPort).catch(async (error: unknown) => {
+    if (hasConfiguredPort || !isAddressInUse(error)) {
+      throw error;
+    }
+
+    return embeddedApiServer!.listen(0);
+  });
+  apiBaseUrl = url;
+}
+
+async function shutdownEmbeddedApiServer(): Promise<void> {
+  eventSocket?.close();
+  eventSocket = undefined;
+
+  if (!embeddedApiServer) {
+    return;
+  }
+
+  if (!embeddedApiShutdown) {
+    embeddedApiShutdown = embeddedApiServer.close().finally(() => {
+      embeddedApiServer = undefined;
+      embeddedApiStartup = undefined;
+      embeddedApiShutdown = undefined;
+    });
+  }
+
+  await embeddedApiShutdown;
+}
+
+function isAddressInUse(error: unknown): boolean {
+  return error instanceof Error && 'code' in error && error.code === 'EADDRINUSE';
 }
 
 async function requestJson<T>(pathname: string, init: RequestInit = {}): Promise<T> {

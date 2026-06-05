@@ -13,6 +13,7 @@
     "typecheck": "tsc -b --pretty false"
   },
   "dependencies": {
+    "@echo-bridge/api": "file:../../apps/api",
     "@echo-bridge/shared": "file:../../packages/shared",
     "@vitejs/plugin-react": "^6.0.2",
     "electron": "^42.3.3",
