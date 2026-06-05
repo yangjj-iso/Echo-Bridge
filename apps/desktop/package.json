@@ -13,23 +13,20 @@
     "typecheck": "tsc -b --pretty false"
   },
   "dependencies": {
-    "@echo-bridge/audio": "file:../../packages/audio",
-    "@echo-bridge/captions": "file:../../packages/captions",
-    "@echo-bridge/pipeline": "file:../../packages/pipeline",
     "@echo-bridge/shared": "file:../../packages/shared",
-    "@echo-bridge/transcription": "file:../../packages/transcription",
-    "@echo-bridge/translation": "file:../../packages/translation",
     "@vitejs/plugin-react": "^6.0.2",
     "electron": "^42.3.3",
     "lucide-react": "^0.561.0",
     "vite": "^8.0.16",
     "react": "^19.2.3",
-    "react-dom": "^19.2.3"
+    "react-dom": "^19.2.3",
+    "ws": "^8.21.0"
   },
   "devDependencies": {
     "@types/node": "^24.10.1",
     "@types/react": "^19.2.7",
     "@types/react-dom": "^19.2.3",
+    "@types/ws": "^8.18.1",
     "concurrently": "^9.2.1",
     "cross-env": "^10.1.0",
     "typescript": "^6.0.3",

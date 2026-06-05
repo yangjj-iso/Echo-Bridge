@@ -1,0 +1,32 @@
+{
+  "name": "@echo-bridge/api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc -b",
+    "dev": "tsx watch src/index.ts",
+    "lint": "eslint src",
+    "start": "node dist/index.js",
+    "typecheck": "tsc -b --pretty false"
+  },
+  "dependencies": {
+    "@echo-bridge/audio": "file:../../packages/audio",
+    "@echo-bridge/pipeline": "file:../../packages/pipeline",
+    "@echo-bridge/shared": "file:../../packages/shared",
+    "@echo-bridge/transcription": "file:../../packages/transcription",
+    "@echo-bridge/translation": "file:../../packages/translation",
+    "cors": "^2.8.5",
+    "express": "^5.2.1",
+    "ws": "^8.19.0"
+  },
+  "devDependencies": {
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.6",
+    "@types/node": "^24.10.1",
+    "@types/ws": "^8.18.1",
+    "tsx": "^4.22.4",
+    "typescript": "^6.0.3"
+  }
+}

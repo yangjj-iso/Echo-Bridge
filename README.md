@@ -8,17 +8,20 @@ notes after the talk.
 ## Product Scope
 
 - Desktop client built with Electron, React, TypeScript, and Vite.
+- Local API backend for AI orchestration, provider credentials, and session state.
 - Output-device oriented audio capture, designed around Windows WASAPI loopback.
-- Realtime transcription and Chinese translation pipeline.
+- Realtime transcription and Chinese translation pipeline owned by the backend layer.
 - Revision-aware caption model for correcting earlier recognition or translation.
 - Post-session summary and export pipeline.
 
 ## Repository Layout
 
 ```text
+apps/api              Local backend API and realtime event stream
 apps/desktop          Electron desktop shell and React renderer
 packages/audio        Audio device and capture abstractions
 packages/captions     Caption model, revisions, and export helpers
+packages/pipeline     Backend realtime interpretation orchestration
 packages/shared       Cross-package event and error types
 packages/transcription Speech-to-text provider boundary
 packages/translation  Translation and revision provider boundary
@@ -34,9 +37,10 @@ npm run test
 npm run dev
 ```
 
+`npm run dev` starts both the local API backend and the Electron desktop client.
 The first implementation uses mock audio and provider adapters so the UI,
-caption state, and module contracts can be reviewed before native loopback
-capture and live AI credentials are added.
+caption state, API boundary, and module contracts can be reviewed before native
+loopback capture and live AI credentials are added.
 
 ## Delivery Principles
 
