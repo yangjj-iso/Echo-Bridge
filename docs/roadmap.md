@@ -49,7 +49,13 @@
 - Add always-on-top compact subtitle window.
 - Keep export links available during and after sessions.
 
-## PR 9: Windows packaging
+## PR 9: Session history
+
+- Persist completed session records locally.
+- Add saved-session list and restore-to-record-view workflow.
+- Support Markdown and SRT export for historical sessions.
+
+## PR 10: Windows packaging
 
 - Configure electron-builder.
 - Add release notes and demo instructions.

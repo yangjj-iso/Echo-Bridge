@@ -4,6 +4,7 @@ import type {
   AppEvent,
   AudioDevice,
   CaptionSegment,
+  SessionHistoryItem,
   SessionRecord,
   StartSessionRequest,
 } from '@echo-bridge/shared';
@@ -19,6 +20,9 @@ export interface EchoBridgeApi {
   stopSession(): Promise<CaptionSegment[]>;
   getCurrentRecord(): Promise<{ record: SessionRecord; stats: unknown }>;
   getExportUrls(): Promise<ExportUrls>;
+  listHistory(): Promise<{ sessions: SessionHistoryItem[] }>;
+  getHistoryRecord(sessionId: string): Promise<{ record: SessionRecord; stats: unknown }>;
+  getHistoryExportUrls(sessionId: string): Promise<ExportUrls>;
   openMiniWindow(): Promise<void>;
   onEvent(listener: (event: AppEvent) => void): () => void;
 }
@@ -31,6 +35,11 @@ const api: EchoBridgeApi = {
   getCurrentRecord: () =>
     ipcRenderer.invoke('session:record') as Promise<{ record: SessionRecord; stats: unknown }>,
   getExportUrls: () => ipcRenderer.invoke('exports:urls') as Promise<ExportUrls>,
+  listHistory: () => ipcRenderer.invoke('history:list') as Promise<{ sessions: SessionHistoryItem[] }>,
+  getHistoryRecord: (sessionId) =>
+    ipcRenderer.invoke('history:record', sessionId) as Promise<{ record: SessionRecord; stats: unknown }>,
+  getHistoryExportUrls: (sessionId) =>
+    ipcRenderer.invoke('history:exports', sessionId) as Promise<ExportUrls>,
   openMiniWindow: () => ipcRenderer.invoke('window:mini') as Promise<void>,
   onEvent: (listener) => {
     const wrapped = (_event: Electron.IpcRendererEvent, appEvent: AppEvent) => listener(appEvent);

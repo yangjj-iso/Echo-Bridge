@@ -61,6 +61,15 @@ export interface SessionRecord {
   captions: CaptionSegment[];
 }
 
+export interface SessionHistoryItem {
+  sessionId: string;
+  startedAt?: string;
+  endedAt?: string;
+  captionCount: number;
+  durationMs: number;
+  revisedCount: number;
+}
+
 export type AppErrorCode =
   | 'AUDIO_DEVICE_NOT_FOUND'
   | 'AUDIO_CAPTURE_FAILED'

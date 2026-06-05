@@ -39,6 +39,11 @@ docs                  Architecture and delivery planning
   - `GET /sessions/current/captions`
   - `GET /sessions/current/export.md`
   - `GET /sessions/current/export.srt`
+- Saved session history stored under `data/sessions/` at runtime, with API access:
+  - `GET /sessions/history`
+  - `GET /sessions/history/:sessionId`
+  - `GET /sessions/history/:sessionId/export.md`
+  - `GET /sessions/history/:sessionId/export.srt`
 
 ## Development
 

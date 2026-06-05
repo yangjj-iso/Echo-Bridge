@@ -3,7 +3,14 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import WebSocket from 'ws';
 
-import type { AppEvent, AudioDevice, CaptionSegment, StartSessionRequest } from '@echo-bridge/shared';
+import type {
+  AppEvent,
+  AudioDevice,
+  CaptionSegment,
+  SessionHistoryItem,
+  SessionRecord,
+  StartSessionRequest,
+} from '@echo-bridge/shared';
 
 const dirname = path.dirname(fileURLToPath(import.meta.url));
 const apiBaseUrl = process.env.ECHO_BRIDGE_API_URL ?? 'http://127.0.0.1:4317';
@@ -103,6 +110,24 @@ ipcMain.handle('exports:urls', () => {
   return {
     markdown: `${apiBaseUrl}/sessions/current/export.md`,
     srt: `${apiBaseUrl}/sessions/current/export.srt`,
+  };
+});
+
+ipcMain.handle('history:list', async () => {
+  return requestJson<{ sessions: SessionHistoryItem[] }>('/sessions/history');
+});
+
+ipcMain.handle('history:record', async (_event, sessionId: string) => {
+  return requestJson<{ record: SessionRecord; stats: unknown }>(
+    `/sessions/history/${encodeURIComponent(sessionId)}`,
+  );
+});
+
+ipcMain.handle('history:exports', (_event, sessionId: string) => {
+  const encoded = encodeURIComponent(sessionId);
+  return {
+    markdown: `${apiBaseUrl}/sessions/history/${encoded}/export.md`,
+    srt: `${apiBaseUrl}/sessions/history/${encoded}/export.srt`,
   };
 });
 

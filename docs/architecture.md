@@ -87,6 +87,11 @@ are applied to that record before being broadcast to clients, so late subscriber
 can fetch the latest state through `GET /sessions/current/record`. Markdown and
 SRT exports are generated from the same caption model used by the live view.
 
+When a session stops, the API persists the record as JSON under `data/sessions/`.
+That runtime directory is intentionally ignored by Git. The desktop history panel
+lists saved sessions from the API and can reload any saved transcript into the
+record view without changing the active realtime session.
+
 ## Windows Audio Plan
 
 The production capture path is Windows WASAPI loopback. It allows EchoBridge AI

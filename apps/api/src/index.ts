@@ -10,6 +10,8 @@ import type { AppEvent, CaptionSegment, SessionRecord, StartSessionRequest } fro
 import { MockTranscriptionProvider } from '@echo-bridge/transcription';
 import { MockTranslationProvider } from '@echo-bridge/translation';
 
+import { listSessionHistory, readSessionRecord, saveSessionRecord } from './sessionHistory.js';
+
 const port = Number(process.env.ECHO_BRIDGE_API_PORT ?? 4317);
 const audioSource = new MockAudioCaptureSource();
 const pipeline = new InterpretationPipeline({
@@ -68,7 +70,61 @@ app.post('/sessions/stop', async (_request, response, next) => {
       status: 'idle',
       captions,
     };
-    response.json({ captions });
+    const historyItem = await saveSessionRecord(sessionRecord);
+    response.json({ captions, historyItem });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.get('/sessions/history', async (_request, response, next) => {
+  try {
+    response.json({ sessions: await listSessionHistory() });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.get('/sessions/history/:sessionId', async (request, response, next) => {
+  try {
+    const record = await readSessionRecord(request.params.sessionId);
+
+    if (!record) {
+      response.status(404).json({ error: { code: 'UNKNOWN', message: 'Session not found.' } });
+      return;
+    }
+
+    response.json({ record, stats: summarizeCaptions(record.captions) });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.get('/sessions/history/:sessionId/export.md', async (request, response, next) => {
+  try {
+    const record = await readSessionRecord(request.params.sessionId);
+
+    if (!record) {
+      response.status(404).send('Session not found.');
+      return;
+    }
+
+    response.type('text/markdown').send(exportMarkdown(record.captions));
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.get('/sessions/history/:sessionId/export.srt', async (request, response, next) => {
+  try {
+    const record = await readSessionRecord(request.params.sessionId);
+
+    if (!record) {
+      response.status(404).send('Session not found.');
+      return;
+    }
+
+    response.type('application/x-subrip').send(exportSrt(record.captions));
   } catch (error) {
     next(error);
   }
