@@ -2,20 +2,21 @@ import { app, BrowserWindow, ipcMain } from 'electron';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { MockAudioCaptureSource, type AudioCaptureSession } from '@echo-bridge/audio';
-import { CaptionStore } from '@echo-bridge/captions';
-import type { AppEvent, CaptionSegment, StartSessionRequest } from '@echo-bridge/shared';
-import { MockTranscriptionProvider, type TranscriptionProvider } from '@echo-bridge/transcription';
-import { MockTranslationProvider, type TranslationProvider } from '@echo-bridge/translation';
+import { MockAudioCaptureSource } from '@echo-bridge/audio';
+import { InterpretationPipeline } from '@echo-bridge/pipeline';
+import type { AppEvent, StartSessionRequest } from '@echo-bridge/shared';
+import { MockTranscriptionProvider } from '@echo-bridge/transcription';
+import { MockTranslationProvider } from '@echo-bridge/translation';
 
 const dirname = path.dirname(fileURLToPath(import.meta.url));
 const audioSource = new MockAudioCaptureSource();
-const captions = new CaptionStore();
-const transcriptionProvider: TranscriptionProvider = new MockTranscriptionProvider();
-const translationProvider: TranslationProvider = new MockTranslationProvider();
+const pipeline = new InterpretationPipeline({
+  audioSource,
+  transcriptionProvider: new MockTranscriptionProvider(),
+  translationProvider: new MockTranslationProvider(),
+});
 
 let mainWindow: BrowserWindow | undefined;
-let captureSession: AudioCaptureSession | undefined;
 
 function sendEvent(event: AppEvent): void {
   mainWindow?.webContents.send('app:event', event);
@@ -50,65 +51,11 @@ ipcMain.handle('devices:list', async () => {
 });
 
 ipcMain.handle('session:start', async (_event, request: StartSessionRequest) => {
-  if (captureSession) {
-    await captureSession.stop();
-  }
-
-  sendEvent({ type: 'session.status', status: 'starting' });
-
-  captureSession = await audioSource.start(request.deviceId, (chunk) => {
-    void transcriptionProvider
-      .acceptAudio(chunk)
-      .then(async (transcripts) => {
-        for (const transcript of transcripts) {
-          const caption: CaptionSegment = captions.upsert({
-            id: transcript.id,
-            startMs: transcript.startMs,
-            endMs: transcript.endMs,
-            sourceText: transcript.text,
-            status: transcript.isFinal ? 'final' : 'partial',
-            confidence: transcript.confidence,
-            revision: 0,
-          });
-          const translation = await translationProvider.translateSegment(caption, captions.list());
-          const translatedCaption = captions.upsert({
-            ...caption,
-            translatedText: translation.translatedText,
-          });
-
-          sendEvent({ type: 'caption.upserted', caption: translatedCaption });
-
-          for (const revision of translation.revisions) {
-            const revised = captions.revise(revision);
-            sendEvent({ type: 'caption.revised', revision });
-            sendEvent({ type: 'caption.upserted', caption: revised });
-          }
-        }
-      })
-      .catch((error: unknown) => {
-        sendEvent({
-          type: 'app.error',
-          error: {
-            code: 'TRANSCRIPTION_FAILED',
-            message: 'Failed to process audio chunk.',
-            recoverable: true,
-            cause: error instanceof Error ? error.message : String(error),
-          },
-        });
-      });
-  });
-
-  sendEvent({ type: 'session.status', status: 'listening' });
-  return { sessionId: captureSession.id };
+  return pipeline.start(request, sendEvent);
 });
 
 ipcMain.handle('session:stop', async () => {
-  sendEvent({ type: 'session.status', status: 'stopping' });
-  await captureSession?.stop();
-  await transcriptionProvider.close();
-  captureSession = undefined;
-  sendEvent({ type: 'session.status', status: 'idle' });
-  return captions.list();
+  return pipeline.stop(sendEvent);
 });
 
 void app.whenReady().then(createWindow);

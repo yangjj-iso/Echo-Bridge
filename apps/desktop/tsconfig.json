@@ -11,6 +11,7 @@
     { "path": "../../packages/shared" },
     { "path": "../../packages/audio" },
     { "path": "../../packages/captions" },
+    { "path": "../../packages/pipeline" },
     { "path": "../../packages/transcription" },
     { "path": "../../packages/translation" }
   ],

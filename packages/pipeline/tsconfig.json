@@ -1,0 +1,16 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "outDir": "dist",
+    "rootDir": "src"
+  },
+  "references": [
+    { "path": "../audio" },
+    { "path": "../captions" },
+    { "path": "../shared" },
+    { "path": "../transcription" },
+    { "path": "../translation" }
+  ],
+  "include": ["src"],
+  "exclude": ["src/**/*.test.ts"]
+}

@@ -30,6 +30,9 @@ packages/transcription
 packages/translation
   -> translates final transcripts and proposes contextual revisions
 
+packages/pipeline
+  -> orchestrates capture, transcription, translation, and caption state
+
 packages/captions
   -> stores caption items, revision history, and export formats
 ```
@@ -46,6 +49,10 @@ devices, capture sessions, audio format metadata, and audio chunks.
 
 The caption package does not know about UI components. It owns deterministic
 caption state transitions, revision counters, and export logic.
+
+The pipeline package owns interpretation session orchestration. Electron main
+process code should delegate the realtime flow to this package and only handle
+IPC, native process lifecycle, and renderer event forwarding.
 
 ## Realtime Pipeline
 
