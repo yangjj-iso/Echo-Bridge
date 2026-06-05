@@ -26,6 +26,8 @@ import type {
   CaptionSegment,
   LanguageCode,
   SessionHistoryItem,
+  SessionRecord,
+  SessionSummary,
   SessionStatus,
   StartSessionRequest,
   TargetLanguageCode,
@@ -43,6 +45,7 @@ function App() {
   const [latencyMode, setLatencyMode] = useState<StartSessionRequest['latencyMode']>('balanced');
   const [status, setStatus] = useState<SessionStatus>('idle');
   const [captions, setCaptions] = useState<CaptionSegment[]>([]);
+  const [summary, setSummary] = useState<SessionSummary>();
   const [exportUrls, setExportUrls] = useState<{ markdown: string; srt: string }>();
   const [history, setHistory] = useState<SessionHistoryItem[]>([]);
   const [viewingHistoryId, setViewingHistoryId] = useState<string | undefined>();
@@ -59,6 +62,7 @@ function App() {
     void echoBridge.getCurrentRecord().then(({ record }) => {
       setStatus(record.status);
       setCaptions(record.captions);
+      setSummary(record.summary);
     });
     void echoBridge.listDevices().then((items) => {
       setDevices(items);
@@ -66,7 +70,7 @@ function App() {
     });
 
     return echoBridge.onEvent((event) => {
-      handleAppEvent(event, setDevices, setStatus, setCaptions, setLastError);
+      handleAppEvent(event, setDevices, setStatus, setCaptions, setSummary, setLastError);
     });
   }, [echoBridge]);
 
@@ -89,6 +93,7 @@ function App() {
     setLastError(undefined);
     setViewingHistoryId(undefined);
     setCaptions([]);
+    setSummary(undefined);
     setExportUrls(await echoBridge.getExportUrls());
     setStatus('starting');
 
@@ -113,6 +118,8 @@ function App() {
     try {
       const finalCaptions = await echoBridge.stopSession();
       setCaptions(finalCaptions);
+      const { record } = await echoBridge.getCurrentRecord();
+      setSummary(record.summary);
       setStatus('idle');
       await refreshHistory();
     } catch (error) {
@@ -155,6 +162,7 @@ function App() {
     ]);
     setViewingHistoryId(sessionId);
     setCaptions(record.captions);
+    setSummary(record.summary);
     setExportUrls(urls);
   }
 
@@ -166,6 +174,7 @@ function App() {
     setViewingHistoryId(undefined);
     setStatus(record.status);
     setCaptions(record.captions);
+    setSummary(record.summary);
     setExportUrls(urls);
   }
 
@@ -305,6 +314,34 @@ function App() {
         <p>{activeCaption?.sourceText ?? 'Select an output device and start a session.'}</p>
       </section>
 
+      {summary ? (
+        <section className="summary-panel">
+          <div className="section-header">
+            <div>
+              <p className="eyebrow">Session summary</p>
+              <h2>{summary.title}</h2>
+            </div>
+          </div>
+          <div className="summary-body">
+            <p>{summary.summary}</p>
+            {summary.keywords.length > 0 ? (
+              <div className="keyword-list">
+                {summary.keywords.map((keyword) => (
+                  <span key={keyword}>{keyword}</span>
+                ))}
+              </div>
+            ) : null}
+            {summary.takeaways.length > 0 ? (
+              <ul className="takeaway-list">
+                {summary.takeaways.map((takeaway) => (
+                  <li key={takeaway}>{takeaway}</li>
+                ))}
+              </ul>
+            ) : null}
+          </div>
+        </section>
+      ) : null}
+
       <section className="caption-list">
         <div className="section-header">
           <div>
@@ -365,7 +402,7 @@ function App() {
               onClick={() => void loadHistory(item.sessionId)}
             >
               <span>{formatDate(item.startedAt)}</span>
-              <strong>{item.captionCount} captions</strong>
+              <strong>{item.title ?? `${item.captionCount} captions`}</strong>
               <em>{formatDuration(item.durationMs)}</em>
             </button>
           ))}
@@ -408,19 +445,18 @@ function createBrowserEchoBridgeApi(): Window['echoBridge'] {
       });
     },
     async stopSession() {
-      const payload = await requestJson<{ captions: CaptionSegment[] }>(
-        `${apiBaseUrl}/sessions/stop`,
-        {
-          method: 'POST',
-        },
-      );
+      const payload = await requestJson<{
+        captions: CaptionSegment[];
+        summary?: SessionSummary;
+      }>(`${apiBaseUrl}/sessions/stop`, {
+        method: 'POST',
+      });
       return payload.captions;
     },
     getCurrentRecord() {
-      return requestJson<{
-        record: { status: SessionStatus; captions: CaptionSegment[] };
-        stats: unknown;
-      }>(`${apiBaseUrl}/sessions/current/record`);
+      return requestJson<{ record: SessionRecord; stats: unknown }>(
+        `${apiBaseUrl}/sessions/current/record`,
+      );
     },
     async getExportUrls() {
       return {
@@ -493,6 +529,7 @@ function handleAppEvent(
   setDevices: (devices: AudioDevice[]) => void,
   setStatus: (status: SessionStatus) => void,
   setCaptions: Dispatch<SetStateAction<CaptionSegment[]>>,
+  setSummary: Dispatch<SetStateAction<SessionSummary | undefined>>,
   setLastError: (message: string | undefined) => void,
 ) {
   switch (event.type) {
@@ -503,6 +540,7 @@ function handleAppEvent(
       setStatus(event.status);
       if (event.status === 'starting') {
         setCaptions([]);
+        setSummary(undefined);
         setLastError(undefined);
       }
       break;
@@ -517,6 +555,7 @@ function handleAppEvent(
     case 'caption.revised':
       break;
     case 'session.summary':
+      setSummary(event.summary);
       break;
     case 'app.error':
       setLastError(event.error.message);

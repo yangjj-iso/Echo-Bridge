@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest';
 
-import { CaptionStore, exportMarkdown, exportSrt, summarizeCaptions } from './index.js';
+import {
+  CaptionStore,
+  exportMarkdown,
+  exportSrt,
+  generateSessionSummary,
+  summarizeCaptions,
+} from './index.js';
 
 describe('CaptionStore', () => {
   it('tracks caption revisions without losing timing metadata', () => {
@@ -84,6 +90,16 @@ describe('caption exports', () => {
     expect(exportMarkdown(captions)).toContain('- ZH: 欢迎参加本次会议。');
   });
 
+  it('exports Markdown with a session summary section', () => {
+    const summary = generateSessionSummary('session-1', captions);
+    const markdown = exportMarkdown(captions, summary);
+
+    expect(markdown).toContain('# Welcome to the conference');
+    expect(markdown).toContain('本次会话共记录 1 条字幕');
+    expect(markdown).toContain('## Takeaways');
+    expect(markdown).toContain('## Captions');
+  });
+
   it('exports SRT with translated caption text', () => {
     expect(exportSrt(captions)).toContain('00:00:00,000 --> 00:00:02,500');
     expect(exportSrt(captions)).toContain('欢迎参加本次会议。');
@@ -145,5 +161,38 @@ describe('caption stats', () => {
       averageConfidence: 0.9,
       durationMs: 2000,
     });
+  });
+});
+
+describe('session summaries', () => {
+  it('generates deterministic titles, keywords, and takeaways from captions', () => {
+    const summary = generateSessionSummary('session-1', [
+      {
+        id: 'caption-1',
+        startMs: 0,
+        endMs: 1000,
+        sourceText: 'Realtime translation architecture improves meeting captions.',
+        translatedText: '实时翻译架构可以改善会议字幕。',
+        status: 'final',
+        revision: 0,
+      },
+      {
+        id: 'caption-2',
+        startMs: 1000,
+        endMs: 2000,
+        sourceText: 'The architecture can revise captions when context changes.',
+        translatedText: '当上下文变化时，该架构可以修正字幕。',
+        status: 'revised',
+        revision: 1,
+      },
+    ]);
+
+    expect(summary).toMatchObject({
+      sessionId: 'session-1',
+      title: 'Realtime translation architecture improves meeting captions',
+      takeaways: ['实时翻译架构可以改善会议字幕。', '当上下文变化时，该架构可以修正字幕。'],
+    });
+    expect(summary.keywords).toContain('architecture');
+    expect(summary.keywords).toContain('captions');
   });
 });

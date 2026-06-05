@@ -5,7 +5,12 @@ import { WebSocketServer, type WebSocket } from 'ws';
 
 import { createAiProvidersFromEnv } from '@echo-bridge/ai';
 import { createAudioCaptureSource } from '@echo-bridge/audio';
-import { exportMarkdown, exportSrt, summarizeCaptions } from '@echo-bridge/captions';
+import {
+  exportMarkdown,
+  exportSrt,
+  generateSessionSummary,
+  summarizeCaptions,
+} from '@echo-bridge/captions';
 import { InterpretationPipeline } from '@echo-bridge/pipeline';
 import {
   EchoBridgeError,
@@ -92,14 +97,21 @@ app.post('/sessions', async (request, response, next) => {
 app.post('/sessions/stop', async (_request, response, next) => {
   try {
     const captions = await pipeline.stop(emit);
+    const summary = sessionRecord.sessionId
+      ? generateSessionSummary(sessionRecord.sessionId, captions)
+      : undefined;
     sessionRecord = {
       ...sessionRecord,
       endedAt: new Date().toISOString(),
       status: 'idle',
       captions,
+      summary,
     };
+    if (summary) {
+      emit({ type: 'session.summary', summary });
+    }
     const historyItem = await saveSessionRecord(sessionRecord);
-    response.json({ captions, historyItem });
+    response.json({ captions, historyItem, summary });
   } catch (error) {
     next(error);
   }
@@ -140,7 +152,7 @@ app.get('/sessions/history/:sessionId', async (request, response, next) => {
       return;
     }
 
-    response.json({ record, stats: summarizeCaptions(record.captions) });
+    response.json({ record: withSummary(record), stats: summarizeCaptions(record.captions) });
   } catch (error) {
     next(error);
   }
@@ -155,7 +167,8 @@ app.get('/sessions/history/:sessionId/export.md', async (request, response, next
       return;
     }
 
-    response.type('text/markdown').send(exportMarkdown(record.captions));
+    const recordWithSummary = withSummary(record);
+    response.type('text/markdown').send(exportMarkdown(record.captions, recordWithSummary.summary));
   } catch (error) {
     next(error);
   }
@@ -181,11 +194,15 @@ app.get('/sessions/current/captions', (_request, response) => {
 });
 
 app.get('/sessions/current/record', (_request, response) => {
-  response.json({ record: sessionRecord, stats: summarizeCaptions(sessionRecord.captions) });
+  response.json({
+    record: withSummary(sessionRecord),
+    stats: summarizeCaptions(sessionRecord.captions),
+  });
 });
 
 app.get('/sessions/current/export.md', (_request, response) => {
-  response.type('text/markdown').send(exportMarkdown(sessionRecord.captions));
+  const record = withSummary(sessionRecord);
+  response.type('text/markdown').send(exportMarkdown(record.captions, record.summary));
 });
 
 app.get('/sessions/current/export.srt', (_request, response) => {
@@ -241,8 +258,13 @@ function applyEventToRecord(event: AppEvent): void {
       break;
     case 'caption.revised':
     case 'devices.updated':
-    case 'session.summary':
     case 'app.error':
+      break;
+    case 'session.summary':
+      sessionRecord = {
+        ...sessionRecord,
+        summary: event.summary,
+      };
       break;
   }
 }
@@ -250,6 +272,17 @@ function applyEventToRecord(event: AppEvent): void {
 function upsertCaption(captions: CaptionSegment[], caption: CaptionSegment): CaptionSegment[] {
   const withoutCurrent = captions.filter((item) => item.id !== caption.id);
   return [...withoutCurrent, caption].sort((left, right) => left.startMs - right.startMs);
+}
+
+function withSummary(record: SessionRecord): SessionRecord {
+  if (record.summary || !record.sessionId || record.captions.length === 0) {
+    return record;
+  }
+
+  return {
+    ...record,
+    summary: generateSessionSummary(record.sessionId, record.captions),
+  };
 }
 
 function normalizeApiError(error: unknown) {

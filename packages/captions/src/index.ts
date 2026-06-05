@@ -1,4 +1,9 @@
-import { EchoBridgeError, type CaptionRevision, type CaptionSegment } from '@echo-bridge/shared';
+import {
+  EchoBridgeError,
+  type CaptionRevision,
+  type CaptionSegment,
+  type SessionSummary,
+} from '@echo-bridge/shared';
 
 export interface CaptionStats {
   total: number;
@@ -21,7 +26,11 @@ export class CaptionStore {
 
     const current = this.#items.get(caption.id);
     const next = current
-      ? normalizeCaption({ ...current, ...caption, revision: Math.max(current.revision, caption.revision) })
+      ? normalizeCaption({
+          ...current,
+          ...caption,
+          revision: Math.max(current.revision, caption.revision),
+        })
       : normalizeCaption(caption);
 
     this.#items.set(next.id, next);
@@ -65,11 +74,35 @@ export class CaptionStore {
   }
 }
 
-export function exportMarkdown(captions: CaptionSegment[]): string {
-  const lines = ['# EchoBridge Session Captions', ''];
+export function exportMarkdown(captions: CaptionSegment[], summary?: SessionSummary): string {
+  const lines = [`# ${summary?.title ?? 'EchoBridge Session Captions'}`, ''];
+
+  if (summary) {
+    lines.push(summary.summary);
+    lines.push('');
+
+    if (summary.keywords.length > 0) {
+      lines.push(`Keywords: ${summary.keywords.join(', ')}`);
+      lines.push('');
+    }
+
+    if (summary.takeaways.length > 0) {
+      lines.push('## Takeaways');
+      lines.push('');
+
+      for (const takeaway of summary.takeaways) {
+        lines.push(`- ${takeaway}`);
+      }
+
+      lines.push('');
+    }
+  }
+
+  lines.push('## Captions');
+  lines.push('');
 
   for (const caption of sortCaptions(captions)) {
-    lines.push(`## ${formatTimestamp(caption.startMs)}`);
+    lines.push(`### ${formatTimestamp(caption.startMs)}`);
     lines.push('');
     lines.push(`- EN: ${caption.sourceText}`);
     lines.push(`- ZH: ${caption.translatedText ?? ''}`);
@@ -115,6 +148,43 @@ export function summarizeCaptions(captions: CaptionSegment[]): CaptionStats {
   };
 }
 
+export function generateSessionSummary(
+  sessionId: string,
+  captions: CaptionSegment[],
+): SessionSummary {
+  const sorted = sortCaptions(captions).filter((caption) => caption.status !== 'partial');
+  const sourceLines = sorted
+    .map((caption) => caption.sourceText)
+    .filter((text): text is string => Boolean(text));
+  const translatedLines = sorted
+    .map((caption) => caption.translatedText)
+    .filter((text): text is string => Boolean(text));
+  const title = buildSummaryTitle(sourceLines);
+  const keywords = extractKeywords(sourceLines);
+  const takeaways =
+    translatedLines.length > 0
+      ? translatedLines.slice(0, 3)
+      : sourceLines.slice(0, 3).filter((line): line is string => Boolean(line));
+  const summaryText =
+    translatedLines.length > 0
+      ? `本次会话共记录 ${sorted.length} 条字幕，主要内容包括：${translatedLines
+          .slice(0, 2)
+          .join(' ')}`
+      : sorted.length > 0
+        ? `This session recorded ${sorted.length} caption lines, mainly covering: ${sourceLines
+            .slice(0, 2)
+            .join(' ')}`
+        : 'No finalized captions were recorded for this session.';
+
+  return {
+    sessionId,
+    title,
+    summary: summaryText,
+    keywords,
+    takeaways,
+  };
+}
+
 function normalizeCaption(caption: CaptionSegment): CaptionSegment {
   assertValidTiming(caption);
   return {
@@ -138,6 +208,56 @@ function sortCaptions(captions: CaptionSegment[]): CaptionSegment[] {
   return [...captions].sort((left, right) => left.startMs - right.startMs);
 }
 
+function buildSummaryTitle(sourceLines: string[]): string {
+  const firstLine = sourceLines[0]?.replace(/[.!?。！？]+$/g, '').trim();
+
+  if (!firstLine) {
+    return 'Untitled EchoBridge Session';
+  }
+
+  const words = firstLine.split(/\s+/).slice(0, 7).join(' ');
+  return words.length > 64 ? `${words.slice(0, 61)}...` : words;
+}
+
+function extractKeywords(lines: string[]): string[] {
+  const counts = new Map<string, number>();
+
+  for (const line of lines) {
+    for (const word of line.toLowerCase().match(/[a-z][a-z-]{2,}/g) ?? []) {
+      const normalized = word.replace(/^-+|-+$/g, '');
+
+      if (!normalized || stopWords.has(normalized)) {
+        continue;
+      }
+
+      counts.set(normalized, (counts.get(normalized) ?? 0) + 1);
+    }
+  }
+
+  return [...counts.entries()]
+    .sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0]))
+    .slice(0, 6)
+    .map(([word]) => word);
+}
+
+const stopWords = new Set([
+  'about',
+  'after',
+  'and',
+  'are',
+  'can',
+  'for',
+  'from',
+  'into',
+  'the',
+  'this',
+  'that',
+  'today',
+  'when',
+  'with',
+  'will',
+]);
+
 function normalizeSrtText(text: string): string {
   return text
     .split(/\r?\n/)
@@ -150,9 +270,7 @@ function formatTimestamp(ms: number): string {
   const seconds = Math.floor(ms / 1000);
   const minutes = Math.floor(seconds / 60);
   const remainingSeconds = seconds % 60;
-  return `${minutes.toString().padStart(2, '0')}:${remainingSeconds
-    .toString()
-    .padStart(2, '0')}`;
+  return `${minutes.toString().padStart(2, '0')}:${remainingSeconds.toString().padStart(2, '0')}`;
 }
 
 function formatSrtTimestamp(ms: number): string {

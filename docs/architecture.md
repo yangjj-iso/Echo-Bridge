@@ -38,7 +38,7 @@ packages/pipeline
   -> orchestrates capture, transcription, translation, and caption state
 
 packages/captions
-  -> stores caption items, revision history, and export formats
+  -> stores caption items, revision history, summary metadata, and export formats
 ```
 
 ## Boundaries
@@ -52,7 +52,8 @@ The audio package does not know about transcription providers. It only exposes
 devices, capture sessions, audio format metadata, and audio chunks.
 
 The caption package does not know about UI components. It owns deterministic
-caption state transitions, revision counters, and export logic.
+caption state transitions, revision counters, summary generation, and export
+logic.
 
 The pipeline package owns interpretation session orchestration. The API backend
 delegates the realtime flow to this package and exposes the result as a process
@@ -74,7 +75,7 @@ requests, and renderer event forwarding.
 9. API broadcasts caption upserts, revision events, and session status updates
    over WebSocket.
 10. Renderer receives caption events through Electron IPC.
-11. Session end triggers summary and export generation.
+11. Session end triggers deterministic summary generation and export metadata.
 
 ## Desktop Views
 
@@ -92,9 +93,11 @@ can fetch the latest state through `GET /sessions/current/record`. Markdown and
 SRT exports are generated from the same caption model used by the live view.
 
 When a session stops, the API persists the record as JSON under `data/sessions/`.
-That runtime directory is intentionally ignored by Git. The desktop history panel
-lists saved sessions from the API and can reload any saved transcript into the
-record view without changing the active realtime session.
+The persisted record includes generated summary metadata: title, short summary,
+keywords, and takeaways. That runtime directory is intentionally ignored by Git.
+The desktop history panel lists saved sessions from the API and can reload any
+saved transcript and its summary into the record view without changing the
+active realtime session.
 
 ## Windows Audio Plan
 
