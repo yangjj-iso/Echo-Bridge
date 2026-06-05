@@ -178,6 +178,12 @@ h1 {
   overflow: hidden;
 }
 
+.history-panel {
+  border: 1px solid #1f2937;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
 .section-header {
   align-items: center;
   background: #0b1120;
@@ -267,6 +273,47 @@ time {
   padding: 24px 16px;
 }
 
+.history-list {
+  background: #111827;
+  display: grid;
+  gap: 1px;
+}
+
+.history-item {
+  align-items: center;
+  background: #111827;
+  border: 0;
+  border-bottom: 1px solid #1f2937;
+  border-radius: 0;
+  color: #cbd5e1;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: minmax(140px, 1fr) 110px 64px;
+  justify-content: stretch;
+  min-height: 56px;
+  padding: 0 16px;
+  text-align: left;
+}
+
+.history-item:hover,
+.history-item.active {
+  background: #172033;
+}
+
+.history-item span {
+  color: #94a3b8;
+}
+
+.history-item strong {
+  color: #f8fafc;
+}
+
+.history-item em {
+  color: #5eead4;
+  font-style: normal;
+  text-align: right;
+}
+
 .mini-shell {
   background: #0b1120;
   color: #f8fafc;
@@ -312,7 +359,8 @@ time {
 @media (max-width: 840px) {
   .control-panel,
   .status-grid,
-  .caption-row {
+  .caption-row,
+  .history-item {
     grid-template-columns: 1fr;
   }
 
@@ -328,5 +376,15 @@ time {
   .export-actions {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .history-item {
+    align-items: start;
+    gap: 4px;
+    padding: 12px 16px;
+  }
+
+  .history-item em {
+    text-align: left;
   }
 }

@@ -5,12 +5,19 @@ import {
   Languages,
   MonitorSpeaker,
   PictureInPicture2,
+  RotateCcw,
   Square,
   Wand2,
 } from 'lucide-react';
 import { createRoot } from 'react-dom/client';
 
-import type { AppEvent, AudioDevice, CaptionSegment, SessionStatus } from '@echo-bridge/shared';
+import type {
+  AppEvent,
+  AudioDevice,
+  CaptionSegment,
+  SessionHistoryItem,
+  SessionStatus,
+} from '@echo-bridge/shared';
 
 import './styles.css';
 
@@ -21,10 +28,13 @@ function App() {
   const [status, setStatus] = useState<SessionStatus>('idle');
   const [captions, setCaptions] = useState<CaptionSegment[]>([]);
   const [exportUrls, setExportUrls] = useState<{ markdown: string; srt: string }>();
+  const [history, setHistory] = useState<SessionHistoryItem[]>([]);
+  const [viewingHistoryId, setViewingHistoryId] = useState<string | undefined>();
   const [lastError, setLastError] = useState<string | undefined>();
 
   useEffect(() => {
     void window.echoBridge.getExportUrls().then(setExportUrls);
+    void refreshHistory();
     void window.echoBridge.getCurrentRecord().then(({ record }) => {
       setStatus(record.status);
       setCaptions(record.captions);
@@ -54,6 +64,9 @@ function App() {
     }
 
     setLastError(undefined);
+    setViewingHistoryId(undefined);
+    setCaptions([]);
+    setExportUrls(await window.echoBridge.getExportUrls());
     await window.echoBridge.startSession({
       deviceId: selectedDeviceId,
       sourceLanguage: 'en',
@@ -65,6 +78,33 @@ function App() {
   async function stopSession() {
     const finalCaptions = await window.echoBridge.stopSession();
     setCaptions(finalCaptions);
+    await refreshHistory();
+  }
+
+  async function refreshHistory() {
+    const { sessions } = await window.echoBridge.listHistory();
+    setHistory(sessions);
+  }
+
+  async function loadHistory(sessionId: string) {
+    const [{ record }, urls] = await Promise.all([
+      window.echoBridge.getHistoryRecord(sessionId),
+      window.echoBridge.getHistoryExportUrls(sessionId),
+    ]);
+    setViewingHistoryId(sessionId);
+    setCaptions(record.captions);
+    setExportUrls(urls);
+  }
+
+  async function restoreCurrentRecord() {
+    const [{ record }, urls] = await Promise.all([
+      window.echoBridge.getCurrentRecord(),
+      window.echoBridge.getExportUrls(),
+    ]);
+    setViewingHistoryId(undefined);
+    setStatus(record.status);
+    setCaptions(record.captions);
+    setExportUrls(urls);
   }
 
   if (isMiniView) {
@@ -135,10 +175,16 @@ function App() {
       <section className="caption-list">
         <div className="section-header">
           <div>
-            <p className="eyebrow">Live record</p>
-            <h2>Realtime bilingual transcript</h2>
+            <p className="eyebrow">{viewingHistoryId ? 'History record' : 'Live record'}</p>
+            <h2>{viewingHistoryId ? 'Saved bilingual transcript' : 'Realtime bilingual transcript'}</h2>
           </div>
           <div className="export-actions">
+            {viewingHistoryId ? (
+              <button onClick={() => void restoreCurrentRecord()}>
+                <RotateCcw size={16} />
+                Current
+              </button>
+            ) : null}
             <a className="export-link" href={exportUrls?.markdown} target="_blank" rel="noreferrer">
               <Download size={16} />
               Markdown
@@ -164,6 +210,30 @@ function App() {
         {captions.length === 0 ? (
           <div className="empty-record">No captions recorded yet.</div>
         ) : null}
+      </section>
+
+      <section className="history-panel">
+        <div className="section-header">
+          <div>
+            <p className="eyebrow">History</p>
+            <h2>Saved sessions</h2>
+          </div>
+          <button onClick={() => void refreshHistory()}>Refresh</button>
+        </div>
+        <div className="history-list">
+          {history.map((item) => (
+            <button
+              key={item.sessionId}
+              className={item.sessionId === viewingHistoryId ? 'history-item active' : 'history-item'}
+              onClick={() => void loadHistory(item.sessionId)}
+            >
+              <span>{formatDate(item.startedAt)}</span>
+              <strong>{item.captionCount} captions</strong>
+              <em>{formatDuration(item.durationMs)}</em>
+            </button>
+          ))}
+          {history.length === 0 ? <div className="empty-record">No saved sessions yet.</div> : null}
+        </div>
       </section>
     </main>
   );
@@ -222,6 +292,25 @@ function formatTime(ms: number): string {
   const seconds = Math.floor(ms / 1000);
   const minutes = Math.floor(seconds / 60);
   return `${minutes.toString().padStart(2, '0')}:${(seconds % 60).toString().padStart(2, '0')}`;
+}
+
+function formatDate(value?: string): string {
+  if (!value) {
+    return 'Unknown time';
+  }
+
+  return new Intl.DateTimeFormat(undefined, {
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(new Date(value));
+}
+
+function formatDuration(ms: number): string {
+  const seconds = Math.max(0, Math.round(ms / 1000));
+  const minutes = Math.floor(seconds / 60);
+  return `${minutes}:${(seconds % 60).toString().padStart(2, '0')}`;
 }
 
 createRoot(document.getElementById('root') as HTMLElement).render(<App />);
