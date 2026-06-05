@@ -19,6 +19,7 @@
     "baseUrl": ".",
     "paths": {
       "@echo-bridge/audio": ["packages/audio/src/index.ts"],
+      "@echo-bridge/ai": ["packages/ai/src/index.ts"],
       "@echo-bridge/captions": ["packages/captions/src/index.ts"],
       "@echo-bridge/pipeline": ["packages/pipeline/src/index.ts"],
       "@echo-bridge/shared": ["packages/shared/src/index.ts"],
