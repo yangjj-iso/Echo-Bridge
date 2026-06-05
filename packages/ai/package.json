@@ -1,0 +1,24 @@
+{
+  "name": "@echo-bridge/ai",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc -b",
+    "test": "vitest run",
+    "typecheck": "tsc -b --pretty false"
+  },
+  "dependencies": {
+    "@echo-bridge/shared": "file:../shared",
+    "@echo-bridge/transcription": "file:../transcription",
+    "@echo-bridge/translation": "file:../translation",
+    "openai": "^6.10.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.10.1",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.8"
+  }
+}

@@ -9,6 +9,7 @@ export default defineConfig({
   resolve: {
     alias: {
       '@echo-bridge/audio': path.resolve(dirname, 'packages/audio/src/index.ts'),
+      '@echo-bridge/ai': path.resolve(dirname, 'packages/ai/src/index.ts'),
       '@echo-bridge/captions': path.resolve(dirname, 'packages/captions/src/index.ts'),
       '@echo-bridge/pipeline': path.resolve(dirname, 'packages/pipeline/src/index.ts'),
       '@echo-bridge/shared': path.resolve(dirname, 'packages/shared/src/index.ts'),

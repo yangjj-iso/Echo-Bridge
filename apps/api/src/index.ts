@@ -3,21 +3,21 @@ import express, { type NextFunction, type Request, type Response } from 'express
 import { createServer } from 'node:http';
 import { WebSocketServer, type WebSocket } from 'ws';
 
+import { createAiProvidersFromEnv } from '@echo-bridge/ai';
 import { MockAudioCaptureSource } from '@echo-bridge/audio';
 import { exportMarkdown, exportSrt, summarizeCaptions } from '@echo-bridge/captions';
 import { InterpretationPipeline } from '@echo-bridge/pipeline';
 import type { AppEvent, CaptionSegment, SessionRecord, StartSessionRequest } from '@echo-bridge/shared';
-import { MockTranscriptionProvider } from '@echo-bridge/transcription';
-import { MockTranslationProvider } from '@echo-bridge/translation';
 
 import { listSessionHistory, readSessionRecord, saveSessionRecord } from './sessionHistory.js';
 
 const port = Number(process.env.ECHO_BRIDGE_API_PORT ?? 4317);
 const audioSource = new MockAudioCaptureSource();
+const aiProviders = createAiProvidersFromEnv();
 const pipeline = new InterpretationPipeline({
   audioSource,
-  transcriptionProvider: new MockTranscriptionProvider(),
-  translationProvider: new MockTranslationProvider(),
+  transcriptionProvider: aiProviders.transcriptionProvider,
+  translationProvider: aiProviders.translationProvider,
 });
 
 const app = express();
@@ -33,7 +33,7 @@ app.use(cors());
 app.use(express.json({ limit: '1mb' }));
 
 app.get('/health', (_request, response) => {
-  response.json({ ok: true, service: 'echo-bridge-api' });
+  response.json({ ok: true, service: 'echo-bridge-api', aiProvider: aiProviders.providerName });
 });
 
 app.get('/devices', async (_request, response, next) => {

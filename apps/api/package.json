@@ -12,6 +12,7 @@
     "typecheck": "tsc -b --pretty false"
   },
   "dependencies": {
+    "@echo-bridge/ai": "file:../../packages/ai",
     "@echo-bridge/audio": "file:../../packages/audio",
     "@echo-bridge/captions": "file:../../packages/captions",
     "@echo-bridge/pipeline": "file:../../packages/pipeline",

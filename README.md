@@ -59,6 +59,27 @@ The first implementation uses mock audio and provider adapters so the UI,
 caption state, API boundary, and module contracts can be reviewed before native
 loopback capture and live AI credentials are added.
 
+## AI Provider Configuration
+
+Default development mode uses mock transcription and translation so CI and local
+UI work without external credentials.
+
+To enable real OpenAI-backed providers in the local API:
+
+```bash
+ECHO_BRIDGE_AI_PROVIDER=openai
+OPENAI_API_KEY=sk-your-key
+ECHO_BRIDGE_TRANSCRIPTION_MODEL=gpt-4o-transcribe
+ECHO_BRIDGE_TRANSLATION_MODEL=gpt-4.1-mini
+```
+
+Current implementation notes:
+
+- Transcription provider buffers PCM chunks and sends them to the OpenAI
+  speech-to-text API.
+- Translation provider uses the Responses API with recent caption context.
+- Mock mode remains the default for demos, tests, and CI.
+
 ## Delivery Principles
 
 - Keep pull requests small and reviewable.

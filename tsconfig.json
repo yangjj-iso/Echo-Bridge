@@ -2,6 +2,7 @@
   "files": [],
   "references": [
     { "path": "packages/shared" },
+    { "path": "packages/ai" },
     { "path": "packages/audio" },
     { "path": "packages/captions" },
     { "path": "packages/pipeline" },
