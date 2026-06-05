@@ -1,4 +1,4 @@
-import type { AudioChunk, AudioDevice, AudioFormat } from '@echo-bridge/shared';
+import { EchoBridgeError, type AudioChunk, type AudioDevice, type AudioFormat } from '@echo-bridge/shared';
 
 export interface AudioCaptureSource {
   listOutputDevices(): Promise<AudioDevice[]>;
@@ -13,21 +13,14 @@ export interface AudioCaptureSession {
 }
 
 export class MockAudioCaptureSource implements AudioCaptureSource {
+  readonly #devices: AudioDevice[];
+
+  constructor(devices: AudioDevice[] = createDefaultMockDevices()) {
+    this.#devices = devices;
+  }
+
   async listOutputDevices(): Promise<AudioDevice[]> {
-    return [
-      {
-        id: 'default-output',
-        label: 'Default system output',
-        kind: 'output',
-        isDefault: true,
-      },
-      {
-        id: 'virtual-meeting-output',
-        label: 'Virtual meeting output',
-        kind: 'output',
-        isDefault: false,
-      },
-    ];
+    return this.#devices.map((device) => ({ ...device }));
   }
 
   async start(deviceId: string, onChunk: (chunk: AudioChunk) => void): Promise<AudioCaptureSession> {
@@ -35,7 +28,11 @@ export class MockAudioCaptureSource implements AudioCaptureSource {
     const device = devices.find((item) => item.id === deviceId);
 
     if (!device) {
-      throw new Error(`Output device not found: ${deviceId}`);
+      throw new EchoBridgeError({
+        code: 'AUDIO_DEVICE_NOT_FOUND',
+        message: `Output device not found: ${deviceId}`,
+        recoverable: true,
+      });
     }
 
     const format: AudioFormat = {
@@ -57,13 +54,37 @@ export class MockAudioCaptureSource implements AudioCaptureSource {
       });
     }, 500);
 
+    let stopped = false;
+
     return {
       id: sessionId,
       deviceId,
       format,
       async stop() {
+        if (stopped) {
+          return;
+        }
+
+        stopped = true;
         clearInterval(timer);
       },
     };
   }
+}
+
+export function createDefaultMockDevices(): AudioDevice[] {
+  return [
+    {
+      id: 'default-output',
+      label: 'Default system output',
+      kind: 'output',
+      isDefault: true,
+    },
+    {
+      id: 'virtual-meeting-output',
+      label: 'Virtual meeting output',
+      kind: 'output',
+      isDefault: false,
+    },
+  ];
 }

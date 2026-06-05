@@ -5,17 +5,18 @@
   "description": "Desktop AI simultaneous interpretation assistant for live system audio.",
   "type": "module",
   "workspaces": [
-    "apps/*",
-    "packages/*"
+    "packages/*",
+    "apps/*"
   ],
   "scripts": {
-    "build": "npm run build --workspaces --if-present",
-    "check": "npm run typecheck --workspaces --if-present && npm run lint --workspaces --if-present",
+    "build": "tsc -b && npm run build:renderer -w @echo-bridge/desktop",
+    "build:ts": "tsc -b",
+    "check": "npm run typecheck && npm run lint",
     "dev": "npm run dev -w @echo-bridge/desktop",
     "format": "prettier --write .",
     "lint": "npm run lint --workspaces --if-present",
     "test": "npm run test --workspaces --if-present",
-    "typecheck": "npm run typecheck --workspaces --if-present"
+    "typecheck": "tsc -b --pretty false"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.1",
