@@ -22,6 +22,7 @@ export class InterpretationPipeline {
   readonly #translationProvider: TranslationProvider;
   readonly #captions: CaptionStore;
   #captureSession?: AudioCaptureSession;
+  #paused = false;
   #processing = Promise.resolve();
 
   constructor(options: InterpretationPipelineOptions) {
@@ -40,6 +41,7 @@ export class InterpretationPipeline {
     }
 
     this.#captions.clear();
+    this.#paused = false;
     emit({ type: 'session.status', status: 'starting' });
     await this.#transcriptionProvider.start?.(request);
 
@@ -47,6 +49,10 @@ export class InterpretationPipeline {
       this.#captureSession = await this.#audioSource.start(
         request.deviceId,
         (chunk) => {
+          if (this.#paused) {
+            return;
+          }
+
           this.#processing = this.#processing
             .then(async () => {
               const transcripts = await this.#transcriptionProvider.acceptAudio(chunk);
@@ -79,6 +85,45 @@ export class InterpretationPipeline {
     return { sessionId: this.#captureSession.id };
   }
 
+  pause(emit?: (event: AppEvent) => void): void {
+    if (!this.#captureSession) {
+      throw new EchoBridgeError({
+        code: 'SESSION_NOT_RUNNING',
+        message: 'Cannot pause because no interpretation session is running.',
+        recoverable: true,
+      });
+    }
+
+    if (this.#paused) {
+      emit?.({ type: 'session.status', status: 'paused' });
+      return;
+    }
+
+    this.#paused = true;
+    emit?.({ type: 'session.status', status: 'paused' });
+  }
+
+  resume(emit?: (event: AppEvent) => void): void {
+    if (!this.#captureSession) {
+      throw new EchoBridgeError({
+        code: 'SESSION_NOT_RUNNING',
+        message: 'Cannot resume because no interpretation session is running.',
+        recoverable: true,
+      });
+    }
+
+    if (!this.#paused) {
+      throw new EchoBridgeError({
+        code: 'SESSION_NOT_PAUSED',
+        message: 'Cannot resume because the interpretation session is not paused.',
+        recoverable: true,
+      });
+    }
+
+    this.#paused = false;
+    emit?.({ type: 'session.status', status: 'listening' });
+  }
+
   async stop(emit?: (event: AppEvent) => void): Promise<CaptionSegment[]> {
     emit?.({ type: 'session.status', status: 'stopping' });
     await this.#captureSession?.stop();
@@ -90,6 +135,7 @@ export class InterpretationPipeline {
       }
     }
     this.#captureSession = undefined;
+    this.#paused = false;
     emit?.({ type: 'session.status', status: 'idle' });
     return this.#captions.list();
   }

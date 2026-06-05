@@ -151,6 +151,72 @@ describe('InterpretationPipeline', () => {
     expect(translateSegment).not.toHaveBeenCalled();
   });
 
+  it('pauses chunk processing and resumes the active capture session', async () => {
+    vi.useFakeTimers();
+    const events: AppEvent[] = [];
+    const pipeline = new InterpretationPipeline({
+      audioSource: new MockAudioCaptureSource(),
+      transcriptionProvider: new MockTranscriptionProvider(),
+      translationProvider: new MockTranslationProvider(),
+    });
+
+    await pipeline.start(
+      {
+        deviceId: 'default-output',
+        sourceLanguage: 'en',
+        targetLanguage: 'zh-CN',
+        latencyMode: 'balanced',
+      },
+      (event) => events.push(event),
+    );
+
+    await vi.advanceTimersByTimeAsync(1_500);
+    pipeline.pause((event) => events.push(event));
+    await vi.advanceTimersByTimeAsync(3_000);
+    expect(events.filter((event) => event.type === 'caption.upserted')).toHaveLength(0);
+
+    pipeline.resume((event) => events.push(event));
+    await vi.advanceTimersByTimeAsync(2_500);
+    const captions = await pipeline.stop((event) => events.push(event));
+    vi.useRealTimers();
+
+    expect(captions.length).toBeGreaterThan(0);
+    expect(events.filter((event) => event.type === 'session.status')).toEqual([
+      { type: 'session.status', status: 'starting' },
+      { type: 'session.status', status: 'listening' },
+      { type: 'session.status', status: 'paused' },
+      { type: 'session.status', status: 'listening' },
+      { type: 'session.status', status: 'stopping' },
+      { type: 'session.status', status: 'idle' },
+    ]);
+  });
+
+  it('rejects resume when the active session is not paused', async () => {
+    const pipeline = new InterpretationPipeline({
+      audioSource: new MockAudioCaptureSource(),
+      transcriptionProvider: new MockTranscriptionProvider(),
+      translationProvider: new MockTranslationProvider(),
+    });
+
+    await pipeline.start(
+      {
+        deviceId: 'default-output',
+        sourceLanguage: 'en',
+        targetLanguage: 'zh-CN',
+        latencyMode: 'balanced',
+      },
+      vi.fn(),
+    );
+
+    expect(() => pipeline.resume()).toThrow(
+      expect.objectContaining({
+        code: 'SESSION_NOT_PAUSED',
+      }),
+    );
+
+    await pipeline.stop();
+  });
+
   it('closes a started transcription provider when audio capture fails to start', async () => {
     const start = vi.fn<TranscriptionProvider['start']>();
     const close = vi.fn<TranscriptionProvider['close']>();

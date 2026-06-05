@@ -111,6 +111,18 @@ ipcMain.handle('session:stop', async () => {
   return payload.captions;
 });
 
+ipcMain.handle('session:pause', async () => {
+  await requestJson('/sessions/pause', {
+    method: 'POST',
+  });
+});
+
+ipcMain.handle('session:resume', async () => {
+  await requestJson('/sessions/resume', {
+    method: 'POST',
+  });
+});
+
 ipcMain.handle('session:record', async () => {
   return requestJson('/sessions/current/record');
 });

@@ -7,7 +7,12 @@ import { createAiProvidersFromEnv } from '@echo-bridge/ai';
 import { createAudioCaptureSource } from '@echo-bridge/audio';
 import { exportMarkdown, exportSrt, summarizeCaptions } from '@echo-bridge/captions';
 import { InterpretationPipeline } from '@echo-bridge/pipeline';
-import type { AppEvent, CaptionSegment, SessionRecord } from '@echo-bridge/shared';
+import {
+  EchoBridgeError,
+  type AppEvent,
+  type CaptionSegment,
+  type SessionRecord,
+} from '@echo-bridge/shared';
 
 import { listSessionHistory, readSessionRecord, saveSessionRecord } from './sessionHistory.js';
 import { ApiRequestError, parseStartSessionRequest } from './startSessionRequest.js';
@@ -95,6 +100,24 @@ app.post('/sessions/stop', async (_request, response, next) => {
     };
     const historyItem = await saveSessionRecord(sessionRecord);
     response.json({ captions, historyItem });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post('/sessions/pause', (_request, response, next) => {
+  try {
+    pipeline.pause(emit);
+    response.json({ status: 'paused' });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post('/sessions/resume', (_request, response, next) => {
+  try {
+    pipeline.resume(emit);
+    response.json({ status: 'listening' });
   } catch (error) {
     next(error);
   }
@@ -233,6 +256,16 @@ function normalizeApiError(error: unknown) {
   if (error instanceof ApiRequestError) {
     return {
       status: error.status,
+      code: error.code,
+      message: error.message,
+      recoverable: error.recoverable,
+    };
+  }
+
+  if (error instanceof EchoBridgeError) {
+    return {
+      status:
+        error.code === 'SESSION_NOT_RUNNING' || error.code === 'SESSION_NOT_PAUSED' ? 409 : 500,
       code: error.code,
       message: error.message,
       recoverable: error.recoverable,

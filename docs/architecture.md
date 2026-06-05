@@ -64,13 +64,17 @@ requests, and renderer event forwarding.
 1. User selects an output audio device in the desktop UI.
 2. Electron main forwards the start request to the local API backend.
 3. API starts an audio capture source.
-4. Audio chunks stream into the transcription provider.
-5. Partial transcripts update the active caption line.
-6. Final transcripts are translated with recent context.
-7. The translation provider may propose revisions for recent caption items.
-8. API broadcasts caption upserts and revision events over WebSocket.
-9. Renderer receives caption events through Electron IPC.
-10. Session end triggers summary and export generation.
+4. Audio chunks stream into the transcription provider while the pipeline is
+   listening.
+5. Pause requests keep the capture session open but stop handing new chunks to
+   the transcription provider until resume.
+6. Partial transcripts update the active caption line.
+7. Final transcripts are translated with recent context.
+8. The translation provider may propose revisions for recent caption items.
+9. API broadcasts caption upserts, revision events, and session status updates
+   over WebSocket.
+10. Renderer receives caption events through Electron IPC.
+11. Session end triggers summary and export generation.
 
 ## Desktop Views
 
