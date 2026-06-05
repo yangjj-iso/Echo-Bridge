@@ -46,6 +46,8 @@ export interface EchoBridgeApi {
   getDiagnostics(): Promise<DiagnosticsStatus>;
   listDevices(): Promise<AudioDevice[]>;
   startSession(request: StartSessionRequest): Promise<{ sessionId: string }>;
+  pauseSession(): Promise<void>;
+  resumeSession(): Promise<void>;
   stopSession(): Promise<CaptionSegment[]>;
   getCurrentRecord(): Promise<{ record: SessionRecord; stats: unknown }>;
   getExportUrls(): Promise<ExportUrls>;
@@ -62,13 +64,19 @@ const api: EchoBridgeApi = {
   listDevices: () => ipcRenderer.invoke('devices:list') as Promise<AudioDevice[]>,
   startSession: (request) =>
     ipcRenderer.invoke('session:start', request) as Promise<{ sessionId: string }>,
+  pauseSession: () => ipcRenderer.invoke('session:pause') as Promise<void>,
+  resumeSession: () => ipcRenderer.invoke('session:resume') as Promise<void>,
   stopSession: () => ipcRenderer.invoke('session:stop') as Promise<CaptionSegment[]>,
   getCurrentRecord: () =>
     ipcRenderer.invoke('session:record') as Promise<{ record: SessionRecord; stats: unknown }>,
   getExportUrls: () => ipcRenderer.invoke('exports:urls') as Promise<ExportUrls>,
-  listHistory: () => ipcRenderer.invoke('history:list') as Promise<{ sessions: SessionHistoryItem[] }>,
+  listHistory: () =>
+    ipcRenderer.invoke('history:list') as Promise<{ sessions: SessionHistoryItem[] }>,
   getHistoryRecord: (sessionId) =>
-    ipcRenderer.invoke('history:record', sessionId) as Promise<{ record: SessionRecord; stats: unknown }>,
+    ipcRenderer.invoke('history:record', sessionId) as Promise<{
+      record: SessionRecord;
+      stats: unknown;
+    }>,
   getHistoryExportUrls: (sessionId) =>
     ipcRenderer.invoke('history:exports', sessionId) as Promise<ExportUrls>,
   openMiniWindow: () => ipcRenderer.invoke('window:mini') as Promise<void>,

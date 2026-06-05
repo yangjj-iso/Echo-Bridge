@@ -78,6 +78,7 @@ export type AppErrorCode =
   | 'TRANSCRIPTION_FAILED'
   | 'TRANSLATION_FAILED'
   | 'SESSION_NOT_RUNNING'
+  | 'SESSION_NOT_PAUSED'
   | 'UNKNOWN';
 
 export interface AppError {

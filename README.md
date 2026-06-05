@@ -30,8 +30,8 @@ docs                  Architecture and delivery planning
 
 ## Current Experience
 
-- Main desktop workspace with device selection, session controls, status metrics,
-  live subtitles, and realtime bilingual record.
+- Main desktop workspace with device selection, start/pause/resume/stop controls,
+  status metrics, live subtitles, and realtime bilingual record.
 - Compact always-on-top mini window for watching translated subtitles while using
   another meeting, course, or video app.
 - Local backend record APIs:
@@ -39,6 +39,11 @@ docs                  Architecture and delivery planning
   - `GET /sessions/current/captions`
   - `GET /sessions/current/export.md`
   - `GET /sessions/current/export.srt`
+- Local backend session controls:
+  - `POST /sessions`
+  - `POST /sessions/pause`
+  - `POST /sessions/resume`
+  - `POST /sessions/stop`
 - Saved session history stored under `data/sessions/` at runtime, with API access:
   - `GET /sessions/history`
   - `GET /sessions/history/:sessionId`

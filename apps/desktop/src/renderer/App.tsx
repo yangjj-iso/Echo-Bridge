@@ -11,7 +11,9 @@ import {
   Download,
   Languages,
   MonitorSpeaker,
+  Pause,
   PictureInPicture2,
+  Play,
   RotateCcw,
   Square,
   Wand2,
@@ -69,9 +71,10 @@ function App() {
   }, [echoBridge]);
 
   const activeCaption = captions.at(-1);
-  const canStart =
-    selectedDeviceId && (status === 'idle' || status === 'paused' || status === 'error');
-  const canStop = status === 'listening' || status === 'starting';
+  const canStart = Boolean(selectedDeviceId) && (status === 'idle' || status === 'error');
+  const canPause = status === 'listening';
+  const canResume = status === 'paused';
+  const canStop = status === 'listening' || status === 'starting' || status === 'paused';
 
   const revisedCount = useMemo(
     () => captions.filter((caption) => caption.status === 'revised').length,
@@ -87,18 +90,57 @@ function App() {
     setViewingHistoryId(undefined);
     setCaptions([]);
     setExportUrls(await echoBridge.getExportUrls());
-    await echoBridge.startSession({
-      deviceId: selectedDeviceId,
-      sourceLanguage,
-      targetLanguage,
-      latencyMode,
-    });
+    setStatus('starting');
+
+    try {
+      await echoBridge.startSession({
+        deviceId: selectedDeviceId,
+        sourceLanguage,
+        targetLanguage,
+        latencyMode,
+      });
+      setStatus('listening');
+    } catch (error) {
+      setStatus('error');
+      setLastError(formatError(error));
+    }
   }
 
   async function stopSession() {
-    const finalCaptions = await echoBridge.stopSession();
-    setCaptions(finalCaptions);
-    await refreshHistory();
+    setLastError(undefined);
+    setStatus('stopping');
+
+    try {
+      const finalCaptions = await echoBridge.stopSession();
+      setCaptions(finalCaptions);
+      setStatus('idle');
+      await refreshHistory();
+    } catch (error) {
+      setStatus('error');
+      setLastError(formatError(error));
+    }
+  }
+
+  async function pauseSession() {
+    setLastError(undefined);
+
+    try {
+      await echoBridge.pauseSession();
+      setStatus('paused');
+    } catch (error) {
+      setLastError(formatError(error));
+    }
+  }
+
+  async function resumeSession() {
+    setLastError(undefined);
+
+    try {
+      await echoBridge.resumeSession();
+      setStatus('listening');
+    } catch (error) {
+      setLastError(formatError(error));
+    }
   }
 
   async function refreshHistory() {
@@ -172,6 +214,14 @@ function App() {
           <button className="primary" disabled={!canStart} onClick={() => void startSession()}>
             <MonitorSpeaker size={18} />
             Start
+          </button>
+          <button disabled={!canPause} onClick={() => void pauseSession()}>
+            <Pause size={17} />
+            Pause
+          </button>
+          <button disabled={!canResume} onClick={() => void resumeSession()}>
+            <Play size={17} />
+            Resume
           </button>
           <button disabled={!canStop} onClick={() => void stopSession()}>
             <Square size={17} />
@@ -347,6 +397,16 @@ function createBrowserEchoBridgeApi(): Window['echoBridge'] {
         body: JSON.stringify(request),
       });
     },
+    async pauseSession() {
+      await requestJson(`${apiBaseUrl}/sessions/pause`, {
+        method: 'POST',
+      });
+    },
+    async resumeSession() {
+      await requestJson(`${apiBaseUrl}/sessions/resume`, {
+        method: 'POST',
+      });
+    },
     async stopSession() {
       const payload = await requestJson<{ captions: CaptionSegment[] }>(
         `${apiBaseUrl}/sessions/stop`,
@@ -509,6 +569,10 @@ function formatLanguage(language: LanguageCode): string {
     case 'zh-CN':
       return 'Chinese';
   }
+}
+
+function formatError(error: unknown): string {
+  return error instanceof Error ? error.message : 'EchoBridge request failed.';
 }
 
 createRoot(document.getElementById('root') as HTMLElement).render(<App />);
