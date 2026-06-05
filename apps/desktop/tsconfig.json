@@ -1,0 +1,18 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "jsx": "react-jsx",
+    "module": "NodeNext",
+    "outDir": "dist-electron",
+    "rootDir": "src",
+    "types": ["node", "vite/client"]
+  },
+  "references": [
+    { "path": "../../packages/shared" },
+    { "path": "../../packages/audio" },
+    { "path": "../../packages/captions" },
+    { "path": "../../packages/transcription" },
+    { "path": "../../packages/translation" }
+  ],
+  "include": ["src"]
+}
