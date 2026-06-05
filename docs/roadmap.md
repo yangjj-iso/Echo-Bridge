@@ -43,7 +43,13 @@
 - Export bilingual captions to Markdown and SRT.
 - Add integration tests for export formatting.
 
-## PR 8: Windows packaging
+## PR 8: Desktop productivity views
+
+- Add realtime transcript record panel.
+- Add always-on-top compact subtitle window.
+- Keep export links available during and after sessions.
+
+## PR 9: Windows packaging
 
 - Configure electron-builder.
 - Add release notes and demo instructions.
