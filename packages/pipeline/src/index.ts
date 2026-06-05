@@ -41,6 +41,7 @@ export class InterpretationPipeline {
 
     this.#captions.clear();
     emit({ type: 'session.status', status: 'starting' });
+    await this.#transcriptionProvider.start?.(request);
 
     this.#captureSession = await this.#audioSource.start(
       request.deviceId,
@@ -50,31 +51,7 @@ export class InterpretationPipeline {
             const transcripts = await this.#transcriptionProvider.acceptAudio(chunk);
 
             for (const transcript of transcripts) {
-              const caption = this.#captions.upsert({
-                id: transcript.id,
-                startMs: transcript.startMs,
-                endMs: transcript.endMs,
-                sourceText: transcript.text,
-                status: transcript.isFinal ? 'final' : 'partial',
-                confidence: transcript.confidence,
-                revision: 0,
-              });
-              const translation = await this.#translationProvider.translateSegment(
-                caption,
-                this.#captions.list(),
-              );
-              const translatedCaption = this.#captions.upsert({
-                ...caption,
-                translatedText: translation.translatedText,
-              });
-
-              emit({ type: 'caption.upserted', caption: translatedCaption });
-
-              for (const revision of translation.revisions) {
-                const revised = this.#captions.revise(revision);
-                emit({ type: 'caption.revised', revision });
-                emit({ type: 'caption.upserted', caption: revised });
-              }
+              await this.#acceptTranscript(transcript, emit);
             }
           })
           .catch((error: unknown) => {
@@ -100,10 +77,53 @@ export class InterpretationPipeline {
     emit?.({ type: 'session.status', status: 'stopping' });
     await this.#captureSession?.stop();
     await this.#processing;
-    await this.#transcriptionProvider.close();
+    const finalTranscripts = await this.#transcriptionProvider.close();
+    if (finalTranscripts) {
+      for (const transcript of finalTranscripts) {
+        await this.#acceptTranscript(transcript, emit);
+      }
+    }
     this.#captureSession = undefined;
     emit?.({ type: 'session.status', status: 'idle' });
     return this.#captions.list();
+  }
+
+  async #acceptTranscript(
+    transcript: Awaited<ReturnType<TranscriptionProvider['acceptAudio']>>[number],
+    emit?: (event: AppEvent) => void,
+  ): Promise<void> {
+    const caption = this.#captions.upsert({
+      id: transcript.id,
+      startMs: transcript.startMs,
+      endMs: transcript.endMs,
+      sourceText: transcript.text,
+      translatedText: transcript.translatedText,
+      status: transcript.isFinal ? 'final' : 'partial',
+      confidence: transcript.confidence,
+      revision: 0,
+    });
+
+    if (transcript.translatedText) {
+      emit?.({ type: 'caption.upserted', caption });
+      return;
+    }
+
+    const translation = await this.#translationProvider.translateSegment(
+      caption,
+      this.#captions.list(),
+    );
+    const translatedCaption = this.#captions.upsert({
+      ...caption,
+      translatedText: translation.translatedText,
+    });
+
+    emit?.({ type: 'caption.upserted', caption: translatedCaption });
+
+    for (const revision of translation.revisions) {
+      const revised = this.#captions.revise(revision);
+      emit?.({ type: 'caption.revised', revision });
+      emit?.({ type: 'caption.upserted', caption: revised });
+    }
   }
 }
 

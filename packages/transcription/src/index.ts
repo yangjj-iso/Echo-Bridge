@@ -1,17 +1,19 @@
-import type { AudioChunk } from '@echo-bridge/shared';
+import type { AudioChunk, StartSessionRequest } from '@echo-bridge/shared';
 
 export interface TranscriptEvent {
   id: string;
   startMs: number;
   endMs?: number;
   text: string;
+  translatedText?: string;
   confidence?: number;
   isFinal: boolean;
 }
 
 export interface TranscriptionProvider {
+  start?(request: StartSessionRequest): Promise<void>;
   acceptAudio(chunk: AudioChunk): Promise<TranscriptEvent[]>;
-  close(): Promise<void>;
+  close(): Promise<TranscriptEvent[] | void>;
 }
 
 export class MockTranscriptionProvider implements TranscriptionProvider {
