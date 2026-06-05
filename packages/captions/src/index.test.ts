@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { CaptionStore, exportMarkdown, exportSrt } from './index.js';
+import { CaptionStore, exportMarkdown, exportSrt, summarizeCaptions } from './index.js';
 
 describe('CaptionStore', () => {
   it('tracks caption revisions without losing timing metadata', () => {
@@ -28,6 +28,42 @@ describe('CaptionStore', () => {
     expect(revised.status).toBe('revised');
     expect(revised.translatedText).toBe('该模块处理缓存。');
   });
+
+  it('rejects stale revisions so older AI updates cannot overwrite newer captions', () => {
+    const store = new CaptionStore();
+
+    store.upsert({
+      id: 'caption-1',
+      startMs: 1000,
+      sourceText: 'Initial caption',
+      status: 'final',
+      revision: 2,
+    });
+
+    expect(() =>
+      store.revise({
+        captionId: 'caption-1',
+        revision: 2,
+        translatedText: '旧更新',
+        reason: 'Stale provider response.',
+      }),
+    ).toThrow('Caption revision must increase');
+  });
+
+  it('rejects invalid caption timing', () => {
+    const store = new CaptionStore();
+
+    expect(() =>
+      store.upsert({
+        id: 'caption-1',
+        startMs: 3000,
+        endMs: 2000,
+        sourceText: 'Invalid timing',
+        status: 'final',
+        revision: 0,
+      }),
+    ).toThrow('Invalid caption timing');
+  });
 });
 
 describe('caption exports', () => {
@@ -51,5 +87,63 @@ describe('caption exports', () => {
   it('exports SRT with translated caption text', () => {
     expect(exportSrt(captions)).toContain('00:00:00,000 --> 00:00:02,500');
     expect(exportSrt(captions)).toContain('欢迎参加本次会议。');
+  });
+
+  it('sorts captions and normalizes multiline SRT text', () => {
+    const srt = exportSrt([
+      {
+        id: 'caption-2',
+        startMs: 3000,
+        sourceText: 'Second',
+        translatedText: '第二句',
+        status: 'final',
+        revision: 0,
+      },
+      {
+        id: 'caption-1',
+        startMs: 0,
+        endMs: 1000,
+        sourceText: 'First',
+        translatedText: ' 第一行 \n\n 第二行 ',
+        status: 'final',
+        revision: 0,
+      },
+    ]);
+
+    expect(srt).toContain('1\n00:00:00,000 --> 00:00:01,000\n第一行\n第二行');
+    expect(srt).toContain('2\n00:00:03,000 --> 00:00:06,000\n第二句');
+  });
+});
+
+describe('caption stats', () => {
+  it('summarizes caption quality signals', () => {
+    expect(
+      summarizeCaptions([
+        {
+          id: 'caption-1',
+          startMs: 0,
+          endMs: 1000,
+          sourceText: 'First',
+          status: 'final',
+          confidence: 0.8,
+          revision: 0,
+        },
+        {
+          id: 'caption-2',
+          startMs: 1000,
+          endMs: 2000,
+          sourceText: 'Second',
+          status: 'revised',
+          confidence: 1,
+          revision: 1,
+        },
+      ]),
+    ).toMatchObject({
+      total: 2,
+      final: 1,
+      revised: 1,
+      averageConfidence: 0.9,
+      durationMs: 2000,
+    });
   });
 });

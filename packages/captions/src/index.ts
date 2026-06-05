@@ -1,11 +1,25 @@
-import type { CaptionRevision, CaptionSegment } from '@echo-bridge/shared';
+import { EchoBridgeError, type CaptionRevision, type CaptionSegment } from '@echo-bridge/shared';
+
+export interface CaptionStats {
+  total: number;
+  final: number;
+  partial: number;
+  revised: number;
+  averageConfidence?: number;
+  durationMs: number;
+}
 
 export class CaptionStore {
   readonly #items = new Map<string, CaptionSegment>();
 
   upsert(caption: CaptionSegment): CaptionSegment {
+    assertValidTiming(caption);
+
     const current = this.#items.get(caption.id);
-    const next = current ? { ...current, ...caption } : caption;
+    const next = current
+      ? normalizeCaption({ ...current, ...caption, revision: Math.max(current.revision, caption.revision) })
+      : normalizeCaption(caption);
+
     this.#items.set(next.id, next);
     return next;
   }
@@ -14,7 +28,19 @@ export class CaptionStore {
     const current = this.#items.get(revision.captionId);
 
     if (!current) {
-      throw new Error(`Caption not found: ${revision.captionId}`);
+      throw new EchoBridgeError({
+        code: 'UNKNOWN',
+        message: `Caption not found: ${revision.captionId}`,
+        recoverable: true,
+      });
+    }
+
+    if (revision.revision <= current.revision) {
+      throw new EchoBridgeError({
+        code: 'UNKNOWN',
+        message: `Caption revision must increase: ${revision.captionId}`,
+        recoverable: true,
+      });
     }
 
     const next: CaptionSegment = {
@@ -25,8 +51,9 @@ export class CaptionStore {
       revision: revision.revision,
     };
 
-    this.#items.set(next.id, next);
-    return next;
+    const normalized = normalizeCaption(next);
+    this.#items.set(normalized.id, normalized);
+    return normalized;
   }
 
   list(): CaptionSegment[] {
@@ -37,7 +64,7 @@ export class CaptionStore {
 export function exportMarkdown(captions: CaptionSegment[]): string {
   const lines = ['# EchoBridge Session Captions', ''];
 
-  for (const caption of captions) {
+  for (const caption of sortCaptions(captions)) {
     lines.push(`## ${formatTimestamp(caption.startMs)}`);
     lines.push('');
     lines.push(`- EN: ${caption.sourceText}`);
@@ -49,16 +76,69 @@ export function exportMarkdown(captions: CaptionSegment[]): string {
 }
 
 export function exportSrt(captions: CaptionSegment[]): string {
-  return captions
+  return sortCaptions(captions)
     .map((caption, index) => {
-      const endMs = caption.endMs ?? caption.startMs + 3000;
+      const normalized = normalizeCaption(caption);
+      const endMs = normalized.endMs ?? normalized.startMs + 3000;
       return [
         String(index + 1),
-        `${formatSrtTimestamp(caption.startMs)} --> ${formatSrtTimestamp(endMs)}`,
-        caption.translatedText ?? caption.sourceText,
+        `${formatSrtTimestamp(normalized.startMs)} --> ${formatSrtTimestamp(endMs)}`,
+        normalizeSrtText(normalized.translatedText ?? normalized.sourceText),
         '',
       ].join('\n');
     })
+    .join('\n');
+}
+
+export function summarizeCaptions(captions: CaptionSegment[]): CaptionStats {
+  const sorted = sortCaptions(captions);
+  const confidenceValues = sorted
+    .map((caption) => caption.confidence)
+    .filter((value): value is number => typeof value === 'number');
+  const first = sorted[0];
+  const last = sorted.at(-1);
+
+  return {
+    total: sorted.length,
+    final: sorted.filter((caption) => caption.status === 'final').length,
+    partial: sorted.filter((caption) => caption.status === 'partial').length,
+    revised: sorted.filter((caption) => caption.status === 'revised').length,
+    averageConfidence:
+      confidenceValues.length > 0
+        ? confidenceValues.reduce((sum, value) => sum + value, 0) / confidenceValues.length
+        : undefined,
+    durationMs: first && last ? (last.endMs ?? last.startMs) - first.startMs : 0,
+  };
+}
+
+function normalizeCaption(caption: CaptionSegment): CaptionSegment {
+  assertValidTiming(caption);
+  return {
+    ...caption,
+    sourceText: caption.sourceText.trim(),
+    translatedText: caption.translatedText?.trim(),
+  };
+}
+
+function assertValidTiming(caption: CaptionSegment): void {
+  if (caption.startMs < 0 || (caption.endMs !== undefined && caption.endMs < caption.startMs)) {
+    throw new EchoBridgeError({
+      code: 'UNKNOWN',
+      message: `Invalid caption timing: ${caption.id}`,
+      recoverable: false,
+    });
+  }
+}
+
+function sortCaptions(captions: CaptionSegment[]): CaptionSegment[] {
+  return [...captions].sort((left, right) => left.startMs - right.startMs);
+}
+
+function normalizeSrtText(text: string): string {
+  return text
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
     .join('\n');
 }
 
